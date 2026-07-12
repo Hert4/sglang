@@ -2868,9 +2868,6 @@ class ModelRunner(ModelRunnerKVCacheMixin):
             action=action, allow_quant_error=allow_quant_error
         )
 
-    def update_weights_from_ipc(self, recv_req):
-        return self.weight_updater.update_weights_from_ipc(recv_req)
-
     def _maybe_rebalance_after_rank_fault(
         self,
         output: ModelRunnerOutput,

@@ -76,6 +76,11 @@ from sglang.srt.speculative.eagle_utils import (
     organize_draft_results,
     per_step_draft_out_cache_loc,
 )
+from sglang.srt.speculative.ring_draft import (
+    build_ring_windowed_kv_indices,
+    resolve_ring_config,
+    ring_out_cache_loc_from_positions,
+)
 from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
 from sglang.srt.speculative.spec_utils import (
     commit_mamba_states_after_verify,
@@ -825,6 +830,32 @@ class EagleDraftWorker(EagleDraftWorkerBase):
         if mm_input_embeds is not None:
             forward_batch.mm_input_embeds = mm_input_embeds
 
+        # [Windowed-MTP ring] Remap prefill onto the compact ring pool. Two parts:
+        #  (1) WRITE: every prefill position is written (wrapping inside the recent
+        #      band). This is value-correct because the draft K/V are pure
+        #      per-position input projections, and only the sink+W slots that
+        #      survive the wrap are ever read back.
+        #  (2) READ: under chunked prefill, chunk >= 2 has a nonzero
+        #      extend_prefix_lens, and the draft prefill would otherwise read that
+        #      prefix through req_to_token (target-space slots), which is out of
+        #      bounds in the compact draft pool. So window+ring the prefix read the
+        #      same way the draft-extend path does.
+        ring_cfg = None
+        if not batch.forward_mode.is_idle():
+            ring_cfg = resolve_ring_config(self.speculative_num_draft_tokens)
+            if ring_cfg.enabled:
+                reqs_per_token = torch.repeat_interleave(
+                    batch.req_pool_indices,
+                    torch.tensor(
+                        batch.extend_seq_lens,
+                        device=forward_batch.positions.device,
+                        dtype=torch.int64,
+                    ),
+                )
+                forward_batch.out_cache_loc = ring_out_cache_loc_from_positions(
+                    reqs_per_token, forward_batch.positions, ring_cfg
+                )
+
         # Seed the first draft-decode loop from each request's last prefill
         # position. Gather last-per-req before the copy (prefill can be long).
         # Skipped under context-parallel prefill (token layout wouldn't match).
@@ -854,7 +885,29 @@ class EagleDraftWorker(EagleDraftWorkerBase):
             else contextlib.nullcontext()
         )
         with canary_ctx:
-            logits_output = self.draft_runner.forward(forward_batch).logits_output
+            if ring_cfg is not None and ring_cfg.enabled:
+                # Init metadata manually so the windowed+ring prefix read can be
+                # patched in before the forward. Prefill is eager (never captured),
+                # so skipping the backend's own init inside forward() is safe.
+                self.draft_runner.attn_backend.init_forward_metadata(forward_batch)
+                prefix_lens = forward_batch.extend_prefix_lens
+                if prefix_lens is not None and int(prefix_lens.max()) > 0:
+                    ring_kv_indices, ring_kv_indptr = build_ring_windowed_kv_indices(
+                        forward_batch.req_pool_indices,
+                        prefix_lens,
+                        ring_cfg,
+                        forward_batch.input_ids.device,
+                    )
+                    backend = self.draft_runner.attn_backend
+                    backend = getattr(backend, "full_attn_backend", backend)
+                    backend.forward_metadata.kv_indices = ring_kv_indices
+                    backend.forward_metadata.kv_indptr = ring_kv_indptr
+                # Mark the pre-plan so forward() does not re-plan and overwrite the
+                # ring indices we just patched in.
+                forward_batch.mark_forward_metadata_ready()
+                logits_output = self.draft_runner.forward(forward_batch).logits_output
+            else:
+                logits_output = self.draft_runner.forward(forward_batch).logits_output
         maybe_detect_nan(logits_output.next_token_logits, "draft_extend_for_prefill")
         maybe_detect_inf(logits_output.next_token_logits, "draft_extend_for_prefill")
 

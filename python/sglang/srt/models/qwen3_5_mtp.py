@@ -16,6 +16,7 @@
 
 import copy
 import logging
+import os
 from contextlib import ExitStack
 from typing import Iterable, Optional, Tuple
 
@@ -92,6 +93,22 @@ class Qwen3_5ForCausalLMMTP(nn.Module):
         mtp_config = copy.deepcopy(config)
         mtp_config.num_hidden_layers = 1
         mtp_config.full_attention_interval = 1
+        # [Windowed-MTP] RK_MTP_MOE_TOPK overrides the MTP layer's routed expert
+        # count (num_experts_per_tok) without touching the target model -- the
+        # override lands on the deep-copied mtp_config consumed by the single MTP
+        # layer built just below. Sweeping 1..num_experts probes acceptance length
+        # against draft FFN cost: fewer experts make the draft cheaper, and the
+        # question is whether AL holds, and whether adding experts back buys enough
+        # AL to pay for itself in net tok/s.
+        mtp_moe_topk = os.environ.get("RK_MTP_MOE_TOPK", "")
+        if mtp_moe_topk:
+            logger.warning(
+                "[Windowed-MTP] MTP routed experts (num_experts_per_tok) %s -> %s "
+                "(target model unchanged)",
+                mtp_config.num_experts_per_tok,
+                int(mtp_moe_topk),
+            )
+            mtp_config.num_experts_per_tok = int(mtp_moe_topk)
         self.model = Qwen3_5ForCausalLM(
             mtp_config,
             quant_config,

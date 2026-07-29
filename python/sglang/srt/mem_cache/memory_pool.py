@@ -26,9 +26,10 @@ import abc
 import dataclasses
 import logging
 import math
+import os
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -237,6 +238,23 @@ def _set_kv_buffer_prefix_valid_impl(
     )
 
 
+# [Windowed-MTP] Memory-pool tracing, env-gated on RK_SCHEDDBG and throttled on
+# change: a long steady-state decode phase emits one line per transition instead
+# of millions. Used together with the scheduler tracing to explain why a queued
+# prefill request is not admitted.
+_RK_MEMDBG = os.environ.get("RK_SCHEDDBG", "0") not in ("", "0")
+_rk_mem_last: Dict[str, str] = {}
+
+
+def _rk_mem_dbg(tag: str, msg: str) -> None:
+    if not _RK_MEMDBG:
+        return
+    if _rk_mem_last.get(tag) == msg:
+        return
+    _rk_mem_last[tag] = msg
+    logger.info("RK_SCHEDDBG %s: %s", tag, msg)
+
+
 class ReqToTokenPool:
     """A memory pool that maps a request to its token locations."""
 
@@ -265,6 +283,12 @@ class ReqToTokenPool:
             )
         self.free_slots = list(range(1, self._alloc_size))
         self.req_generation = torch.zeros(self._alloc_size, dtype=torch.int64)
+        _rk_mem_dbg(
+            "REQPOOL_INIT",
+            f"ReqToTokenPool size={self.size} alloc_size={self._alloc_size} "
+            f"initial_free_slots={len(self.free_slots)} "
+            f"max_context_len={max_context_len}",
+        )
 
     def write(self, indices, values):
         self.req_to_token[indices] = values
@@ -289,6 +313,11 @@ class ReqToTokenPool:
 
         need_size = len(reqs) - len(reusing)
         if need_size > len(self.free_slots):
+            _rk_mem_dbg(
+                "REQPOOL_ALLOC_FAIL",
+                f"need_size={need_size} free_slots={len(self.free_slots)} "
+                f"nreqs={len(reqs)} reusing={len(reusing)} -> return None",
+            )
             return None
         select_index = self.free_slots[:need_size]
         self.free_slots = self.free_slots[need_size:]

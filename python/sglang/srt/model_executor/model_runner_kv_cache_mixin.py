@@ -1081,9 +1081,40 @@ class ModelRunnerKVCacheMixin:
                         "kv_lora_rank": self.model_config.kv_lora_rank,
                         "qk_rope_head_dim": self.model_config.qk_rope_head_dim,
                     }
+                # [Windowed-MTP ring] Shrink the *draft* HybridLinearKVPool from a
+                # full-length pool to a compact per-request ring of
+                # (sink + window + draft_tokens) slots. Draft-only and env-gated; the
+                # draft KV indices and writes are remapped by the same ring mapping in
+                # generate_draft_decode_kv_indices / assign_draft_cache_locs.
+                hybrid_pool_size = self.max_total_num_tokens
+                if self.is_draft_worker:
+                    from sglang.srt.speculative.ring_draft import (
+                        assert_ring_supported,
+                        resolve_ring_config,
+                    )
+
+                    ring_cfg = resolve_ring_config(
+                        self.server_args.speculative_num_draft_tokens or 0
+                    )
+                    assert_ring_supported(self.server_args, ring_cfg)
+                    if ring_cfg.enabled:
+                        max_num_reqs = self.req_to_token_pool.size
+                        ring_size = ring_cfg.pool_size(max_num_reqs)
+                        logger.info(
+                            "[Windowed-MTP ring] draft KV pool: %d -> %d slots "
+                            "(sink=%d W=%d D=%d, %d reqs x %d slots/req)",
+                            hybrid_pool_size,
+                            ring_size,
+                            ring_cfg.sink,
+                            ring_cfg.window,
+                            ring_cfg.draft_tokens,
+                            max_num_reqs,
+                            ring_cfg.slots_per_req,
+                        )
+                        hybrid_pool_size = ring_size
                 self.token_to_kv_pool = HybridLinearKVPool(
                     page_size=self.page_size,
-                    size=self.max_total_num_tokens,
+                    size=hybrid_pool_size,
                     dtype=self.kv_cache_dtype,
                     head_num=self.model_config.get_num_kv_heads(
                         get_parallel().attn_tp_size

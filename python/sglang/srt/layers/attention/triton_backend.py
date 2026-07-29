@@ -27,6 +27,11 @@ from sglang.srt.mem_cache.swa_memory_pool import SWAKVPool
 from sglang.srt.model_executor.cuda_graph_config import cuda_graph_fully_disabled
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
 from sglang.srt.runtime_context import get_parallel
+from sglang.srt.speculative import attn_mass
+from sglang.srt.speculative.ring_draft import (
+    fill_ring_windowed_kv_indices,
+    resolve_ring_config,
+)
 from sglang.srt.speculative.spec_utils import (
     draft_kv_indices_buffer_width,
     draft_kv_indices_used_len,
@@ -156,6 +161,9 @@ class TritonAttnBackend(AttentionBackend):
         )
         self.num_draft_tokens = model_runner.server_args.speculative_num_draft_tokens
         self.speculative_num_steps = model_runner.server_args.speculative_num_steps
+        # [Windowed-MTP ring] Cached so the graph-safe windowed+ring draft-extend
+        # read can be selected without touching the env on the hot path.
+        self.ring_cfg = resolve_ring_config(self.num_draft_tokens or 0)
         self.topk = model_runner.server_args.speculative_eagle_topk or 0
         # Split-KV verify is bit-equivalent only for a pure-causal chain (topk==1)
         # and is gfx95-only; else fall back to extend_attention_fwd.
@@ -531,9 +539,27 @@ class TritonAttnBackend(AttentionBackend):
         else:
             extend_seq_lens = torch.zeros(bs, dtype=torch.int32, device=seq_lens.device)
         kv_lens = torch.clamp(seq_lens - extend_seq_lens, min=0).to(torch.int32)
-        kv_indptr = self._fill_kv_indptr_and_indices(
-            bs, kv_lens, req_pool_indices, self.cuda_graph_kv_indices
-        )
+        if self.ring_cfg.enabled:
+            # [Windowed-MTP ring] The draft prefix physically lives in only
+            # sink + W distinct slots, so gathering the full [0, seq) span would
+            # both index the compact pool out of bounds and re-read evicted
+            # positions. Emit the kept positions directly instead, mapped to their
+            # ring slots. keep_cap is S+W (not slots_per_req): kv_lens above is
+            # prefix-only -- the D tree tokens are the new extend queries and are
+            # written separately via out_cache_loc.
+            kv_indptr = self.kv_indptr[: bs + 1]
+            fill_ring_windowed_kv_indices(
+                req_pool_indices,
+                kv_lens,
+                self.ring_cfg,
+                self.ring_cfg.sink + self.ring_cfg.window,
+                kv_indptr,
+                self.cuda_graph_kv_indices,
+            )
+        else:
+            kv_indptr = self._fill_kv_indptr_and_indices(
+                bs, kv_lens, req_pool_indices, self.cuda_graph_kv_indices
+            )
         return qo_indptr, kv_indptr, num_tokens_per_bs
 
     def init_forward_metadata_out_graph(
@@ -1693,6 +1719,12 @@ class TritonAttnBackend(AttentionBackend):
             kv_indptr = self.forward_metadata.kv_indptr
             kv_indices = self.forward_metadata.kv_indices
 
+        # [Windowed-MTP] Draft attention-mass probe (RK_ATTN_MASS=1). Runs eager on
+        # the native/full kv_indices so it measures how much attention mass the
+        # draft actually puts outside a candidate window; no-op otherwise.
+        if attn_mass.ENABLED:
+            attn_mass.maybe_record_decode(q, layer, forward_batch, kv_indptr, kv_indices)
+
         if layer.k_scale is not None and layer.v_scale is not None:
             k_descale = layer.k_scale_float
             v_descale = layer.v_scale_float
@@ -1817,6 +1849,19 @@ class TritonMultiStepDraftBackend:
         self.req_to_token_pool = model_runner.req_to_token_pool
         self.pool_len = model_runner.req_to_token_pool.req_to_token.shape[1]
         self.page_size = model_runner.server_args.page_size
+        # [Windowed-MTP ring] Draft KV ring-buffer params handed to
+        # generate_draft_decode_kv_indices. All zero => ring off, gather as usual.
+        ring_cfg = resolve_ring_config(
+            model_runner.server_args.speculative_num_draft_tokens or 0
+        )
+        if ring_cfg.enabled:
+            self.ring_slots_per_req = ring_cfg.slots_per_req
+            self.ring_sink = ring_cfg.sink
+            self.ring_modulus = ring_cfg.modulus
+        else:
+            self.ring_slots_per_req = 0
+            self.ring_sink = 0
+            self.ring_modulus = 0
 
     def common_template(
         self,
@@ -1851,6 +1896,11 @@ class TritonMultiStepDraftBackend:
             next_power_of_2(self.speculative_num_steps),
             next_power_of_2(bs),
             self.page_size,
+            get_int_env_var("RK_MTP_WINDOW", 0),  # [Windowed-MTP] draft KV window (0=off)
+            get_int_env_var("RK_MTP_SINK", 0),  # [Windowed-MTP] sink tokens (0=window-only)
+            self.ring_slots_per_req,  # [Windowed-MTP ring] 0 => gather (ring off)
+            self.ring_sink,
+            self.ring_modulus,
         )
 
         if call_fn is None:

@@ -110,6 +110,11 @@ class EagleDraftWorkerBase(ABC):
             ForwardBatch,
             ForwardMode,
         )
+        from sglang.srt.speculative.ring_draft import (
+            build_ring_windowed_kv_indices,
+            resolve_ring_config,
+            ring_extend_out_cache_loc,
+        )
         from sglang.srt.utils.async_probe import maybe_detect_oob
         from sglang.srt.utils.common import is_npu
 
@@ -152,6 +157,18 @@ class EagleDraftWorkerBase(ABC):
             else ForwardMode.DRAFT_EXTEND_V2
         )
         batch.capture_hidden_mode = capture_mode
+
+        # [Windowed-MTP ring] Remap the draft-extend WRITE to compact ring slots.
+        # The extend writes KV for the D committed positions
+        # [prefix_len, prefix_len + D) of each req, and out_cache_loc is not
+        # otherwise set on this path. batch.seq_lens is still the pre-write prefix
+        # length here -- the +num_draft_tokens mutation below lands on forward_batch.
+        ring_cfg = resolve_ring_config(num_draft_tokens)
+        if ring_cfg.enabled and not batch.forward_mode.is_idle():
+            batch.out_cache_loc = ring_extend_out_cache_loc(
+                batch.req_pool_indices, batch.seq_lens, num_draft_tokens, ring_cfg
+            )
+
         forward_batch = ForwardBatch.init_new(batch, draft_model_runner)
         # Forward sees post-write length (draft extend writes num_draft_tokens
         # slots); mutation stays on forward_batch to preserve SB.seq_lens.
@@ -168,6 +185,26 @@ class EagleDraftWorkerBase(ABC):
         )
         if not batch.forward_mode.is_idle() and not can_cuda_graph:
             draft_model_runner.attn_backend.init_forward_metadata(forward_batch)
+            # [Windowed-MTP ring] Override the prefix READ with windowed + ring
+            # indices -- the compact pool only physically holds sink+W of the
+            # prefix, so the default full-span gather would read evicted slots.
+            # Eager only: cuda graph is disallowed under RK_DRAFT_RING, enforced by
+            # assert_ring_supported at pool-construction time.
+            if ring_cfg.enabled:
+                ring_kv_indices, ring_kv_indptr = build_ring_windowed_kv_indices(
+                    batch.req_pool_indices,
+                    batch.seq_lens,
+                    ring_cfg,
+                    forward_batch.input_ids.device,
+                )
+                # On hybrid (GDN/Mamba2) models the draft attn backend is a
+                # HybridLinearAttnBackend that delegates attention to
+                # `full_attn_backend`; that sub-backend is the one holding
+                # forward_metadata.
+                backend = draft_model_runner.attn_backend
+                backend = getattr(backend, "full_attn_backend", backend)
+                backend.forward_metadata.kv_indices = ring_kv_indices
+                backend.forward_metadata.kv_indptr = ring_kv_indptr
             # Planned pre-pad; do NOT opt into post-pad re-plan. DSA's indexer
             # cannot rebuild its deep_gemm schedule_meta on a DP-padded batch
             # (the `_batch_size == batch_size` assertion, see #27091); the
@@ -197,6 +234,7 @@ class EagleDraftWorkerBase(ABC):
             CaptureHiddenMode,
             ForwardBatch,
         )
+        from sglang.srt.speculative.ring_draft import resolve_ring_config
 
         if not batch.forward_mode.is_idle():
             bs = len(batch.seq_lens)
@@ -221,6 +259,11 @@ class EagleDraftWorkerBase(ABC):
                     )
                 else:
                     # FIXME(lsyin): align with the default code path
+                    # [Windowed-MTP ring] All-zero ring params => gather as usual.
+                    draft_ring = resolve_ring_config(
+                        draft_model_runner.server_args.speculative_num_draft_tokens
+                        or 0
+                    )
                     assign_draft_cache_locs_contiguous[(bs,)](
                         batch.req_pool_indices,
                         req_to_token_pool.req_to_token,
@@ -229,6 +272,9 @@ class EagleDraftWorkerBase(ABC):
                         req_to_token_pool.req_to_token.shape[1],
                         topk,
                         num_steps,
+                        draft_ring.slots_per_req if draft_ring.enabled else 0,
+                        draft_ring.sink if draft_ring.enabled else 0,
+                        draft_ring.modulus if draft_ring.enabled else 0,
                     )
             else:
                 # page_size > 1 + topk > 1: per-branch page-aligned draft pages.

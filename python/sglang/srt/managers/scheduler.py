@@ -287,6 +287,24 @@ else:
 
 logger = logging.getLogger(__name__)
 
+# [Windowed-MTP] Scheduler tracing, env-gated on RK_SCHEDDBG and throttled on
+# change: a message is emitted only when it differs from the last one for that
+# tag, so a long steady-state decode phase yields one line per transition instead
+# of millions. Used to trace why a queued prefill request is not admitted -- i.e.
+# why the scheduler flips to decode with requests still waiting.
+_RK_SCHEDDBG = os.environ.get("RK_SCHEDDBG", "0") not in ("", "0")
+_rk_dbg_last: Dict[str, str] = {}
+
+
+def _rk_dbg(tag: str, msg: str) -> None:
+    if not _RK_SCHEDDBG:
+        return
+    if _rk_dbg_last.get(tag) == msg:
+        return
+    _rk_dbg_last[tag] = msg
+    logger.info("RK_SCHEDDBG %s: %s", tag, msg)
+
+
 # Test retract decode for debugging purposes
 TEST_RETRACT = envs.SGLANG_TEST_RETRACT.get()
 TEST_RETRACT_INTERVAL = envs.SGLANG_TEST_RETRACT_INTERVAL.get()
@@ -2757,8 +2775,17 @@ class Scheduler(
         return NextBatchPlan(batch_to_run=ret, running_batch=running_batch)
 
     def get_num_allocatable_reqs(self, running_bs):
-        res = get_server_args().pp_max_micro_batch_size - running_bs
-        res = min(res, self.req_to_token_pool.available_size())
+        pp_cap = get_server_args().pp_max_micro_batch_size
+        req_pool_avail = self.req_to_token_pool.available_size()
+        res = pp_cap - running_bs
+        res = min(res, req_pool_avail)
+        _rk_dbg(
+            "ALLOC",
+            f"pp_max_micro_batch_size={pp_cap} running_bs={running_bs} "
+            f"req_to_token_pool.available_size={req_pool_avail} "
+            f"max_running_requests={getattr(self, 'max_running_requests', None)} "
+            f"-> allocatable={res}",
+        )
         return res
 
     def get_new_batch_prefill(self, running_batch: ScheduleBatch) -> NextBatchPlan:
@@ -2827,6 +2854,11 @@ class Scheduler(
             and self.chunked_req is None
             and not self.enable_priority_preemption
         ):
+            _rk_dbg(
+                "PREFILL_RET",
+                f"no allocatable reqs: running_bs={running_bs} "
+                f"waiting={len(self.waiting_queue)} -> batch_is_full, return None",
+            )
             running_batch.batch_is_full = True
             return None, running_batch
 
@@ -2893,6 +2925,11 @@ class Scheduler(
 
             running_bs = len(running_batch.reqs)
             if len(adder.can_run_list) >= self.get_num_allocatable_reqs(running_bs):
+                _rk_dbg(
+                    "PREFILL_CAP",
+                    f"can_run_list={len(adder.can_run_list)} >= allocatable "
+                    f"(running_bs={running_bs}) -> batch_is_full",
+                )
                 running_batch.batch_is_full = True
             if self.disaggregation_mode == DisaggregationMode.PREFILL:
                 # In prefill mode, prealloc queue and transfer queue can also take memory,

@@ -16,6 +16,9 @@ Memory-efficient attention for prefill.
 It supports page size = 1 and prefill with KV cache (i.e. extend).
 """
 
+import logging
+import os
+
 import torch
 import triton
 import triton.language as tl
@@ -25,6 +28,8 @@ from sglang.kernels.ops.attention.prefill_attention import (
     context_attention_fwd,
 )
 from sglang.srt.utils import is_cuda, is_gfx95_supported, is_hip
+
+logger = logging.getLogger(__name__)
 
 _is_cuda = is_cuda()
 if _is_cuda:
@@ -681,8 +686,31 @@ def extend_attention_fwd(
     stride_lse_bs = lse_extend.stride(0) if STORE_LSE else 0
     stride_lse_h = lse_extend.stride(1) if STORE_LSE else 0
 
+    if os.environ.get("RK_DEBUG_KVLEN") and not torch.cuda.is_current_stream_capturing():
+        # [Windowed-MTP] Actual prefix (KV) scan length per request as seen by
+        # _fwd_kernel -- this is how we verify the draft's kv_indices really was
+        # truncated to the window. Draft-extend is CUDA-graphed, so this only
+        # fires on an EAGER call; a D2H copy during capture would be illegal.
+        _kv_indptr_cpu = kv_indptr[: batch_size + 1].to("cpu")
+        _kv_lens = (_kv_indptr_cpu[1:] - _kv_indptr_cpu[:-1]).tolist()
+        _qo_indptr_cpu = qo_indptr[: batch_size + 1].to("cpu")
+        _qo_lens = (_qo_indptr_cpu[1:] - _qo_indptr_cpu[:-1]).tolist()
+        logger.info(
+            "[RK_DEBUG_KVLEN] bs=%d kv_scan_len=%s qo_len=%s max_len_extend=%d "
+            "sliding_window_size=%d kv_indices_numel=%d",
+            batch_size,
+            _kv_lens,
+            _qo_lens,
+            int(max_len_extend),
+            int(sliding_window_size),
+            int(kv_indices.numel()),
+        )
+
     grid = (batch_size, head_num, triton.cdiv(max_len_extend, BLOCK_M))
-    num_stages = 1
+    # [Windowed-MTP] Pipeline depth is knob-tunable; default 1 keeps upstream
+    # behaviour. RK_EXTEND_STAGES=2 overlaps KV loads with the MMA, which is what
+    # the long-prefix draft-extend pass of the windowed MTP path benefits from.
+    num_stages = int(os.environ.get("RK_EXTEND_STAGES") or "1")
 
     extra_kargs = {}
     if _is_hip:

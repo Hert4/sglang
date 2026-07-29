@@ -2074,6 +2074,8 @@ class FlashInferMultiStepDraftBackend:
             next_power_of_2(self.speculative_num_steps),
             next_power_of_2(bs),
             self.page_size,
+            get_int_env_var("RK_MTP_WINDOW", 0),  # [Windowed-MTP] draft KV window (0=off)
+            get_int_env_var("RK_MTP_SINK", 0),  # [Windowed-MTP] StreamingLLM sink tokens (0=window-only)
         )
 
         assert forward_batch.spec_info is not None

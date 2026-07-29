@@ -801,6 +801,12 @@ class Qwen3_5AttentionDecoderLayer(nn.Module):
             prefix=add_prefix("o_proj", prefix),
         )
 
+        # [Windowed-MTP] The MTP/NEXTN draft attention is windowed NOT via
+        # layer.sliding_window_size (that routes to SGLang's SWA grouped-decode
+        # kernel, which is buggy for the spec-draft path on B200), but by
+        # truncating the draft's kv_indices to the last RK_MTP_WINDOW tokens in the
+        # triton backend's draft-decode metadata. So the layer stays "full" here
+        # and reuses the working decode kernel over fewer KV positions.
         self.attn = RadixAttention(
             self.num_heads,
             self.head_dim,

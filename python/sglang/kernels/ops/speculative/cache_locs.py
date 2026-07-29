@@ -98,6 +98,9 @@ def assign_draft_cache_locs_contiguous(
     pool_len: tl.constexpr,
     topk: tl.constexpr,
     speculative_num_steps: tl.constexpr,
+    ring_slots_per_req: tl.constexpr = 0,
+    ring_sink: tl.constexpr = 0,
+    ring_modulus: tl.constexpr = 0,
 ):
     BLOCK_SIZE: tl.constexpr = 128
     pid = tl.program_id(axis=0)
@@ -107,12 +110,23 @@ def assign_draft_cache_locs_contiguous(
 
     # Copy from req_to_token to out_cache_loc
     kv_start = tl.load(seq_lens + pid)
-    token_pool = req_to_token + tl.load(req_pool_indices + pid) * pool_len
+    req_idx = tl.load(req_pool_indices + pid)
+    token_pool = req_to_token + req_idx * pool_len
+    ring_base = req_idx * ring_slots_per_req
     num_loop = tl.cdiv(copy_len, BLOCK_SIZE)
     for i in range(num_loop):
         copy_offset = tl.arange(0, BLOCK_SIZE) + i * BLOCK_SIZE
         mask = copy_offset < copy_len
-        data = tl.load(token_pool + kv_start + copy_offset, mask=mask)
+        if ring_modulus > 0:
+            # [Windowed-MTP ring] Tree token position = seq_len + copy_offset;
+            # write to the matching ring slot. This mapping must stay identical to
+            # the decode-side read in generate_draft_decode_kv_indices, otherwise
+            # the draft reads slots it never wrote.
+            pos = kv_start + copy_offset
+            recent_slot = ring_sink + (pos - ring_sink) % ring_modulus
+            data = ring_base + tl.where(pos < ring_sink, pos, recent_slot)
+        else:
+            data = tl.load(token_pool + kv_start + copy_offset, mask=mask)
         tl.store(out_cache_ptr + copy_offset, data, mask=mask)
 
 
@@ -131,7 +145,29 @@ def generate_draft_decode_kv_indices(
     iter_upper: tl.constexpr,
     num_tokens_upper: tl.constexpr,
     page_size: tl.constexpr,
+    window_size: tl.constexpr = 0,
+    sink_size: tl.constexpr = 0,
+    ring_slots_per_req: tl.constexpr = 0,
+    ring_sink: tl.constexpr = 0,
+    ring_modulus: tl.constexpr = 0,
 ):
+    # [Windowed-MTP ring] ring_modulus > 0 => the draft KV pool is a compact per-request
+    # ring of `ring_slots_per_req` slots; instead of gathering the shared allocator slot
+    # from `req_to_token`, we emit the ring physical slot for each token *position*:
+    #   ring_slot(r, p) = r*ring_slots_per_req + (p < ring_sink ? p
+    #                                             : ring_sink + (p - ring_sink) % ring_modulus)
+    # This must stay in lock-step with the draft KV write locations (out_cache_loc),
+    # which use the identical mapping. Requires window_size > 0 (only the last
+    # `window_size` + tree positions are ever read, so no evicted slot is touched).
+    # [Windowed-MTP] window_size > 0 sparsifies the SPEC-DRAFT decode KV
+    # (the MTP/NEXTN draft head) to a StreamingLLM layout: keep the first
+    # `sink_size` tokens (attention sink) + the most-recent `window_size` tokens.
+    # sink_size == 0 => pure recent window. It is applied here, in the canonical
+    # draft-decode index builder, so it is (a) backend-agnostic (flashinfer/
+    # triton/aiter all read the resulting kv_indptr/kv_indices), and (b) cuda-
+    # graph safe (fixed launch grid, no host sync, lengths carried in kv_indptr
+    # exactly like the variable-seqlen path the graph already replays).
+    # window_size == 0 reproduces the original full-KV behavior byte-for-byte.
     BLOCK_SIZE: tl.constexpr = 128
     iters = tl.program_id(axis=0)
     bid = tl.program_id(axis=1)
@@ -148,27 +184,62 @@ def generate_draft_decode_kv_indices(
     load_offset = tl.arange(0, bs_upper)
     seq_lens = tl.load(paged_kernel_lens + load_offset, mask=load_offset < bid, other=0)
     seq_len = tl.load(paged_kernel_lens + bid)
+    # Window the prefix length used for *layout* (cumulative offsets) and the
+    # number of base tokens copied. Extend (newly-cached draft) tokens are kept.
+    # window+sink: keep first `sink_size` + last `window_size` -> total kept =
+    # min(seq_len, window_size+sink_size); `s_eff` sink tokens read from pool[0:s_eff],
+    # the rest read from the recent window starting at `recent_start`.
+    if window_size > 0:
+        cap = window_size + sink_size
+        seq_lens = tl.minimum(seq_lens, cap)
+        seq_len_w = tl.minimum(seq_len, cap)  # total kept base tokens (sink+recent)
+        s_eff = tl.minimum(sink_size, seq_len)
+        recent_start = seq_len - (seq_len_w - s_eff)  # start of recent window in pool
+    else:
+        seq_len_w = seq_len
+        s_eff = 0
+        recent_start = 0
     cum_seq_len = tl.sum(seq_lens)
 
     # Update kv_indices
-    kv_offset = cum_seq_len * topk + bid * iters * topk + topk_id * (seq_len + iters)
+    kv_offset = cum_seq_len * topk + bid * iters * topk + topk_id * (seq_len_w + iters)
     kv_ptr = kv_indices + kv_offset
-    token_pool_ptr = req_to_token + tl.load(req_pool_indices + bid) * pool_len
+    req_idx = tl.load(req_pool_indices + bid)
+    token_pool_ptr = req_to_token + req_idx * pool_len
+    ring_base = req_idx * ring_slots_per_req
 
     kv_offset = tl.arange(0, BLOCK_SIZE)
-    num_loop = tl.cdiv(seq_len, BLOCK_SIZE)
+    num_loop = tl.cdiv(seq_len_w, BLOCK_SIZE)
     for _ in range(num_loop):
-        mask = kv_offset < seq_len
-        data = tl.load(token_pool_ptr + kv_offset, mask=mask)
+        mask = kv_offset < seq_len_w
+        # gather: first s_eff outputs map to pool[0:s_eff] (sink), the rest to the
+        # recent window pool[recent_start:]. s_eff==0 => contiguous recent slice.
+        src = tl.where(kv_offset < s_eff, kv_offset, recent_start + kv_offset - s_eff)
+        if ring_modulus > 0:
+            # emit ring physical slot for token *position* `src` (no gather)
+            recent_slot = ring_sink + (src - ring_sink) % ring_modulus
+            data = ring_base + tl.where(src < ring_sink, src, recent_slot)
+        else:
+            data = tl.load(token_pool_ptr + src, mask=mask)
         tl.store(kv_ptr + kv_offset, data, mask=mask)
         kv_offset += BLOCK_SIZE
 
     extend_offset = tl.arange(0, iter_upper)
     if page_size == 1 or topk == 1:
-        extend_data = tl.load(
-            token_pool_ptr + seq_len + topk_id * num_steps + tl.arange(0, iter_upper),
-            mask=extend_offset < iters,
-        )
+        if ring_modulus > 0:
+            # tree tokens live at positions seq_len + topk_id*num_steps + i
+            epos = seq_len + topk_id * num_steps + tl.arange(0, iter_upper)
+            extend_data = (
+                ring_base + ring_sink + (epos - ring_sink) % ring_modulus
+            )
+        else:
+            extend_data = tl.load(
+                token_pool_ptr
+                + seq_len
+                + topk_id * num_steps
+                + tl.arange(0, iter_upper),
+                mask=extend_offset < iters,
+            )
     else:
         prefix_len = seq_len
         last_page_len = prefix_len % page_size
@@ -184,7 +255,7 @@ def generate_draft_decode_kv_indices(
             mask=extend_offset < iters,
         )
 
-    tl.store(kv_ptr + seq_len + extend_offset, extend_data, mask=extend_offset < iters)
+    tl.store(kv_ptr + seq_len_w + extend_offset, extend_data, mask=extend_offset < iters)
 
     # Update kv_indptr
     bs_offset = tl.arange(0, num_tokens_upper)
@@ -193,6 +264,10 @@ def generate_draft_decode_kv_indices(
     if zid == 0:
         zid = num_seqs * topk
     positions = tl.load(positions + bs_offset, mask=bs_offset < zid, other=0)
+    # Match the windowed layout: each prior slot contributes min(len, W+sink) base
+    # tokens to the cumulative kv_indptr (extend tokens unchanged).
+    if window_size > 0:
+        positions = tl.minimum(positions, window_size + sink_size)
     base = tl.sum(positions)
     tl.store(kv_indptr + zid, base + zid * iters)
 

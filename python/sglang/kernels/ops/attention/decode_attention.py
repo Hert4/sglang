@@ -21,6 +21,7 @@ It supports page size = 1.
 # https://github.com/ModelTC/lightllm/blob/96353e868a840db4d103138caf15ed9dbea8c186/lightllm/models/deepseek2/triton_kernel/gqa_flash_decoding_stage2.py
 
 import logging
+import os
 
 import triton
 import triton.language as tl
@@ -609,7 +610,10 @@ def _decode_grouped_att_m_fwd(
     )
 
     extra_kargs = {}
-    num_stages = 2
+    # [Windowed-MTP] Grouped draft-decode split-K stage-1 pipeline depth. Default 2
+    # keeps upstream behaviour; RK_DECODE_STAGES makes it tunable so the Triton
+    # draft-decode step can be probed against the FlashInfer backend.
+    num_stages = int(os.environ.get("RK_DECODE_STAGES") or "2")
     if _is_hip:
         # https://rocm.docs.amd.com/en/docs-6.2.0/how-to/llm-fine-tuning-optimization/optimizing-triton-kernel.html
         # https://github.com/triton-lang/triton/blob/main/third_party/amd/backend/compiler.py

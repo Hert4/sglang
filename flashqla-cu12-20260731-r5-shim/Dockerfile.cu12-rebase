@@ -1,0 +1,74 @@
+# FlashQLA tren base sglang MOI (da co fix #27998).
+#
+# Vi sao rebase: base cu `nightly-dev-cu12-20260713-b94ac87e` ra truoc khi PR #27998
+# merge (16/07/2026 01:23 UTC) nen dinh crash
+#   TypeError: 'NoneType' object cannot be interpreted as an integer
+#   in set_mamba_track_indices_from_reqs()   <- EAGLE verify + mamba extra_buffer
+# Issue upstream dung model nay: sgl-project/sglang#31103 (con open, report tren 0.5.15).
+#
+# Patch flashqla-gdn-prefill.patch da test `git apply --check -p1` sach tren main 29/07:
+# 4 file, chi lech offset, khong hunk nao hong.
+#
+# Build:
+#   docker build -f Dockerfile.cu12-rebase \
+#     -t ductransa01/sglang-flashqla:cu12-20260731 .
+#
+# LUU Y con lai (xem sgl-project/sglang#29449, open):
+#   Fix da merge chi guard None -> 0. Voi req da finish/retract ma con nam trong batch
+#   TARGET_VERIFY them mot vong (overlap scheduler lag), default 0 co the ghi state cu
+#   vao slot da tai cap phat cho req khac => hong recurrent state AM THAM.
+#   Neu khong can mamba prefix-cache thi nen chay them:
+#       --mamba-radix-cache-strategy no_buffer
+#   de tranh han duong extra_buffer (tat ca ping-pong track), van giu EAGLE.
+
+ARG BASE=lmsysorg/sglang:nightly-dev-cu12-20260731-68d44294
+FROM ${BASE}
+
+COPY flashqla-gdn-prefill.patch /tmp/flashqla-gdn-prefill.patch
+
+RUN set -eux; \
+    SGL_PKG=$(python3 -c "import sglang, os; print(os.path.dirname(sglang.__file__))"); \
+    \
+    # 1) Base PHAI da co fix #27998 — fail-closed, khong de build ra image van dinh bug.
+    SB="$SGL_PKG/srt/managers/schedule_batch.py"; \
+    grep -q "mamba_next_track_idx" "$SB" \
+        || { echo "[assert] khong thay mamba_next_track_idx — layout doi, xem lai"; exit 1; }; \
+    grep -q "mamba_next_track_idx is not None else 0" "$SB" \
+        || { echo "[assert] BASE CHUA CO fix #27998 (guard None mamba_next_track_idx); chon nightly >= 20260718"; exit 1; }; \
+    echo "[assert] OK: base da co guard #27998"; \
+    \
+    # 2) Ap patch flashqla — strict, khong fuzz (-F0), hong la build fail.
+    if [ -f /sgl-workspace/sglang/python/sglang/srt/server_args.py ]; then \
+        patch -p1 -F0 -d /sgl-workspace/sglang < /tmp/flashqla-gdn-prefill.patch; \
+    else \
+        patch -p2 -F0 -d "$(dirname "$SGL_PKG")" < /tmp/flashqla-gdn-prefill.patch; \
+    fi; \
+    \
+    # 3) Nghiem thu
+    grep -q "flashqla" "$SGL_PKG/srt/server_args.py"; \
+    python3 -m py_compile \
+        "$SGL_PKG/srt/server_args.py" \
+        "$SGL_PKG/srt/layers/attention/linear/utils.py" \
+        "$SGL_PKG/srt/layers/attention/linear/gdn_backend.py" \
+        "$SGL_PKG/srt/layers/attention/linear/kernels/gdn_flashqla.py"; \
+    \
+    # 4) flash-qla PHAI cai --no-deps.
+    # flash-qla 0.1.2 ghim cung tilelang==0.1.9 + apache-tvm-ffi==0.1.9, con base
+    # 20260731 dung 0.1.11 (sglang va sgl-deep-gemm deu doi 0.1.11). De pip tu giai
+    # dependency thi no HA CAP ca hai xuong 0.1.9 -> nvidia-cutlass-dsl 4.6.0 goi
+    # make_kwargs_wrapper(..., map_dataclass_to_tuple=...) khong con ton tai ->
+    # server chet ngay luc capture CUDA graph prefill:
+    #   TypeError: make_kwargs_wrapper() got an unexpected keyword argument
+    # Da kiem tren H200: voi tilelang 0.1.11 thi `import flash_qla` VA
+    # flashinfer.norm.gemma_rmsnorm deu chay binh thuong.
+    V() { python3 -c "import importlib.metadata as m,sys; print(m.version(sys.argv[1]))" "$1"; }; \
+    TVM_BEFORE=$(V apache-tvm-ffi); TL_BEFORE=$(V tilelang); \
+    pip install --no-cache-dir --no-deps flash-qla==0.1.2; \
+    TVM_AFTER=$(V apache-tvm-ffi); TL_AFTER=$(V tilelang); \
+    [ "$TVM_BEFORE" = "$TVM_AFTER" ] \
+        || { echo "[assert] apache-tvm-ffi bi doi $TVM_BEFORE -> $TVM_AFTER"; exit 1; }; \
+    [ "$TL_BEFORE" = "$TL_AFTER" ] \
+        || { echo "[assert] tilelang bi doi $TL_BEFORE -> $TL_AFTER"; exit 1; }; \
+    echo "[assert] OK: tvm-ffi=$TVM_AFTER tilelang=$TL_AFTER giu nguyen"; \
+    python3 -c "import importlib.metadata as m; print('flash-qla', m.version('flash-qla'))"; \
+    rm /tmp/flashqla-gdn-prefill.patch

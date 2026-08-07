@@ -1,0 +1,17 @@
+# Lop shim strip RUNAI_PATH_PREFIX cho image r4 — y het lop shim prod cu
+# (sitecustomize.py md5 19d90308f83773b99fe775e18212b8d6, boc tu layer 868B cua
+# image cu12-20260713-shim dang chay prod).
+#
+# Build (tren may co the push Harbor):
+#   docker build -f Dockerfile.shim-r5 -t ductransa01/sglang-flashqla:cu12-20260731-r5-shim .
+#   docker tag  ductransa01/sglang-flashqla:cu12-20260731-r5-shim \
+#               <HARBOR>/aiteam/sglang-flashqla:cu12-20260731-r5-shim
+#   docker push <HARBOR>/aiteam/sglang-flashqla:cu12-20260731-r5-shim
+#
+# LUU Y: ban da build san nay CO TREN DOCKER HUB roi:
+#   ductransa01/sglang-flashqla:cu12-20260731-r5-shim  (digest f5cf60cf2d8f)
+# — pull ve retag day Harbor la nhanh nhat, khoi build lai. Dockerfile nay de
+# tai lap/audit hoac build trong llmops theo quy trinh.
+FROM ductransa01/sglang-flashqla:cu12-20260731-r5
+COPY sitecustomize.py /opt/runai-shim/sitecustomize.py
+ENV PYTHONPATH=/opt/runai-shim

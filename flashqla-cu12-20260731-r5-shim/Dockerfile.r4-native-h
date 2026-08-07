@@ -1,0 +1,13 @@
+# r4 = r3 + native-h: FlashQLA tu sinh mid-chunk states qua output_h=True —
+# het fallback, an duoc extra_buffer o prefill dai (CCR / long-context).
+# Can cu: parity probe 31/07 (h flashqla == h fork: shape/granularity/layout/gia tri).
+#
+#   docker build -f Dockerfile.r4-native-h -t ductransa01/sglang-flashqla:cu12-20260731-r4 .
+ARG BASE=ductransa01/sglang-flashqla:cu12-20260731-r3
+FROM ${BASE}
+
+COPY flashqla_native_h_r4.py /tmp/flashqla_native_h_r4.py
+RUN set -eux; \
+    SGL_PKG=$(python3 -c "import sglang, os; print(os.path.dirname(sglang.__file__))"); \
+    python3 /tmp/flashqla_native_h_r4.py "$SGL_PKG"; \
+    rm /tmp/flashqla_native_h_r4.py

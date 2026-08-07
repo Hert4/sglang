@@ -1,0 +1,13 @@
+# r3 = r2 + trackfix: FlashQLA fallback Triton khi mamba radix-track can mid-chunk h.
+# Xem flashqla_trackfix_r3.py cho chan doan day du (crash `assert h is not None`
+# o forward >=16384 token khi extra_buffer bat).
+#
+#   docker build -f Dockerfile.r3-trackfix -t ductransa01/sglang-flashqla:cu12-20260731-r3 .
+ARG BASE=ductransa01/sglang-flashqla:cu12-20260731-r2
+FROM ${BASE}
+
+COPY flashqla_trackfix_r3.py /tmp/flashqla_trackfix_r3.py
+RUN set -eux; \
+    SGL_PKG=$(python3 -c "import sglang, os; print(os.path.dirname(sglang.__file__))"); \
+    python3 /tmp/flashqla_trackfix_r3.py "$SGL_PKG"; \
+    rm /tmp/flashqla_trackfix_r3.py

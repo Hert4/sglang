@@ -183,6 +183,14 @@ class GDNKernelDispatcher:
             raise ValueError(
                 "The Helion linear-attention backend supports KDA only, not GDN."
             )
+        elif prefill_backend.is_flashqla():
+            if not is_cuda():
+                raise ValueError("FlashQLA GDN backend requires CUDA")
+            from sglang.srt.layers.attention.linear.kernels.gdn_flashqla import (
+                FlashQLAGDNKernel,
+            )
+
+            self.extend_kernel = FlashQLAGDNKernel()
         else:
             raise ValueError(f"Unsupported GDN prefill backend: {prefill_backend}")
 
@@ -695,6 +703,14 @@ class GDNAttnBackend(MambaAttnBackendBase):
                 ssm_states=ssm_states_contig,
                 cache_indices=state_cache_indices,
                 query_start_loc=query_start_loc,
+                # FlashQLA khong san xuat duoc checkpoint giua chunk; bao truoc
+                # cho kernel biet forward nay can `h` de no fallback Triton.
+                # (numel() la metadata host-side, khong GPU sync.)
+                track_needs_h=(
+                    forward_metadata.has_mamba_track_mask
+                    and forward_metadata.track_ssm_h_src is not None
+                    and forward_metadata.track_ssm_h_src.numel() > 0
+                ),
                 state_checkpoint_cu_starts=(
                     forward_metadata.state_checkpoint_cu_starts
                 ),

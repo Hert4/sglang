@@ -494,3 +494,27 @@ def create_intel_xpu_backend(runner):
     from sglang.srt.layers.attention.xpu_backend import XPUAttentionBackend
 
     return XPUAttentionBackend(runner)
+
+
+@register_attention_backend("flashprefill")
+def create_flashprefill_backend(runner):
+    if runner.use_mla_backend:
+        raise ValueError("flashprefill backend can only be used with non-MLA models.")
+    from sglang.srt.layers.attention.flashprefill_backend import FlashPrefillAttnBackend
+
+    # Block-sparse hyper-parameters come from the CLI (--flashprefill-*); their
+    # defaults live on ServerArgs and mirror FlashPrefillAttnBackend.__init__,
+    # so an unset flag equals the backend default.
+    sa = runner.server_args
+    return FlashPrefillAttnBackend(
+        runner,
+        attention_sink=sa.flashprefill_attention_sink,
+        window=sa.flashprefill_window,
+        abs_threshold=sa.flashprefill_abs_threshold,
+        full_attention_layers=sa.flashprefill_full_attention_layers,
+        last_n_blocks=sa.flashprefill_last_n_blocks,
+        min_sparse_q_len=sa.flashprefill_min_sparse_q_len,
+        min_sparse_kv_len=sa.flashprefill_min_sparse_kv_len,
+        k_block_n=sa.flashprefill_k_block_n,
+        use_mean_correction=sa.flashprefill_use_mean_correction,
+    )

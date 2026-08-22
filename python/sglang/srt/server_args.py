@@ -180,6 +180,7 @@ QUANTIZATION_CHOICES = [
 
 ATTENTION_BACKEND_CHOICES = [
     # Common
+    "flashprefill",
     "triton",
     "torch_native",
     "flex_attention",
@@ -1723,6 +1724,52 @@ class ServerArgs:
         ),
         NS("exec.kernel"),
     ] = None
+    # FlashPrefill V2 block-sparse prefill (--prefill-attention-backend flashprefill)
+    flashprefill_attention_sink: A[
+        int,
+        "Number of always-selected sink blocks at the start of the sequence.",
+        NS("exec.kernel"),
+    ] = 2
+    flashprefill_window: A[
+        int,
+        "Local sliding-window size, in blocks, always selected.",
+        NS("exec.kernel"),
+    ] = 4
+    flashprefill_abs_threshold: A[
+        float,
+        "Max-based dynamic threshold alpha in (0, 1]. A block is kept when its tile-level score energy is at least alpha times the largest block energy in the same (KV head, Q tile) segment. Larger is sparser.",
+        NS("exec.kernel"),
+    ] = 1.0
+    flashprefill_full_attention_layers: A[
+        int,
+        "Keep the first N layers on dense attention (0-based layer_id < N).",
+        NS("exec.kernel"),
+    ] = 0
+    flashprefill_last_n_blocks: A[
+        int,
+        "Number of trailing blocks always selected.",
+        NS("exec.kernel"),
+    ] = 2
+    flashprefill_min_sparse_q_len: A[
+        int,
+        "Batches whose max Q length is at or below this fall back to dense attention entirely. Set to 0 to always allow sparsity.",
+        NS("exec.kernel"),
+    ] = 4096
+    flashprefill_min_sparse_kv_len: A[
+        int,
+        "Batches whose max KV length is at or below this fall back to dense attention entirely. Index-construction cost is paid at every length while the saving scales with KV length, so below the crossover the batch pays more than it saves. Unlike --flashprefill-min-sparse-q-len this stays meaningful under chunked prefill, where the max Q length equals the chunk size at every chunk. 0 disables the gate.",
+        NS("exec.kernel"),
+    ] = 0
+    flashprefill_k_block_n: A[
+        int,
+        "Logical K-block size in tokens for scoring and selection; a power-of-two multiple of 64, expanded into 64-token attention tiles by the index builder.",
+        NS("exec.kernel"),
+    ] = 64
+    flashprefill_use_mean_correction: A[
+        bool,
+        "Enable the zero-order mean correction: unselected KV blocks contribute their pooled K/V means inside the attention epilogue (forward only).",
+        NS("exec.kernel"),
+    ] = False
     sampling_backend: A[
         Optional[str],
         Arg(

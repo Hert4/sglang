@@ -1,0 +1,19 @@
+python/sglang/kernels/ops/attention/extend_attention.py
+  s_d1f12d11d9f5db::t_798dc6fa2730d1 146-168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "4bc53dc3236c2056df41bf3924f3308ac2b04b93",
+  "prompts": {},
+  "sessions": {
+    "s_d1f12d11d9f5db": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a3f533b-97f1-463c-bee3-08466ec41cb6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

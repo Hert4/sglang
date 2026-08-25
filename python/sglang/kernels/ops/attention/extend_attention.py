@@ -142,6 +142,12 @@ def _get_block_sizes_for_extend_attention(Lq: int, Lv: int):
     return BLOCK_DMODEL, BLOCK_DPE, BLOCK_DV, BLOCK_M, BLOCK_N, num_warps
 
 
+def _num_stages_for_extend_attention(Lq: int) -> int:
+    if not _is_cuda or CUDA_CAPABILITY[0] < 9:
+        return 1
+    return 3 if Lq <= 256 else 2
+
+
 def _compact_extend_q_tiles_per_head(
     *,
     batch_size: int,
@@ -606,7 +612,12 @@ def _fwd_kernel(
         else tl.minimum(cur_seq_len_extend, (cur_block_m + 1) * BLOCK_M)
     )
     extend_end = 0 if SKIP_EXTEND else cur_block_m_end
-    for start_n in range(0, extend_end, BLOCK_N):
+    extend_start = 0
+    if SLIDING_WINDOW_SIZE > 0:
+        extend_start = (
+            tl.maximum(cur_block_m * BLOCK_M - SLIDING_WINDOW_SIZE, 0) // BLOCK_N
+        ) * BLOCK_N
+    for start_n in range(extend_start, extend_end, BLOCK_N):
         start_n = tl.multiple_of(start_n, BLOCK_N)
         mask_n = (start_n + offs_n) < cur_block_m_end
 
@@ -644,7 +655,7 @@ def _fwd_kernel(
             final_mask &= window_mask
 
         SKIP_TILE = False
-        if USE_CUSTOM_MASK or SLIDING_WINDOW_SIZE > 0:
+        if USE_CUSTOM_MASK:
             SKIP_TILE = tl.max(tl.max(final_mask.to(tl.int32), axis=1), axis=0) == 0
 
         if not SKIP_TILE:
@@ -837,7 +848,7 @@ def extend_attention_fwd(
         grid = (compact_q_tiles, head_num)
     else:
         grid = (batch_size, head_num, triton.cdiv(max_len_extend, BLOCK_M))
-    num_stages = 1
+    num_stages = _num_stages_for_extend_attention(Lq)
 
     extra_kargs = {}
     if _is_hip:

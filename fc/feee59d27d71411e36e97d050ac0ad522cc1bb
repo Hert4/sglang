@@ -1,0 +1,23 @@
+python/sglang/srt/arg_groups/model_overrides/qwen4_exp.py
+  s_d2003be81f3894::t_1997f8651070da 6-10
+python/sglang/srt/model_executor/model_runner_components/load_model_utils.py
+  s_d2003be81f3894::t_2eb1d33d9a50e4 271-277,283,332-336
+python/sglang/srt/server_args.py
+  s_d2003be81f3894::t_a03e08ac934271 4163-4167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "fcfeee59d27d71411e36e97d050ac0ad522cc1bb",
+  "prompts": {},
+  "sessions": {
+    "s_d2003be81f3894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58966894-6f93-4eec-b9ca-c71c949a6b43",
+        "model": "claude-opus-5"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+python/sglang/srt/arg_groups/model_hook.py
+  s_d2003be81f3894::t_c4b76876fb0ccf 535
+python/sglang/srt/arg_groups/model_overrides/qwen3_moe.py
+  s_d2003be81f3894::t_439ec36e162c65 26
+python/sglang/srt/arg_groups/overrides.py
+  s_d2003be81f3894::t_dce5957cc23952 501,525,966
+python/sglang/srt/arg_groups/pd_disaggregation_hook.py
+  s_d2003be81f3894::t_1d1502060a448f 249
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "41cdccab6537336ebb5c3caf46a0c723db833e0f",
+  "prompts": {},
+  "sessions": {
+    "s_d2003be81f3894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58966894-6f93-4eec-b9ca-c71c949a6b43",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

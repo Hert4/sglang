@@ -1,0 +1,209 @@
+benchmark/kernels/fused_moe_triton/common_utils.py
+  s_d2003be81f3894::t_9f8b71cd60daba 93-99
+python/sglang/kernels/jit/csrc/attention/qsa_indexer.cuh
+  s_d2003be81f3894::t_5fec11c072b4c5 1-506
+python/sglang/kernels/jit/csrc/elementwise/fast_topk.cuh
+  s_d2003be81f3894::t_390c4cac031a67 1-297
+python/sglang/kernels/jit/csrc/elementwise/grouped_gemma_rmsnorm.cuh
+  s_d2003be81f3894::t_5cf055bce428fd 1-178
+python/sglang/kernels/jit/csrc/elementwise/hc_combine.cuh
+  s_d2003be81f3894::t_21c4fadf61f4a3 1-383
+python/sglang/kernels/kda_kernels/README.md
+  s_d2003be81f3894::t_95727dbddfecfb 1-10
+python/sglang/kernels/kda_kernels/__init__.py
+  s_d2003be81f3894::t_6246bf654ec694 1
+python/sglang/kernels/kda_kernels/qwen38_qsa_sm121/README.md
+  s_d2003be81f3894::t_83c25ec5a02f89 1-51
+python/sglang/kernels/kda_kernels/qwen38_qsa_sm121/__init__.py
+  s_d2003be81f3894::t_d56345ee97b677 1-87
+python/sglang/kernels/kda_kernels/qwen38_qsa_sm121/kernel.py
+  s_d2003be81f3894::t_0c4d812d4b7edb 1-274
+python/sglang/kernels/ops/attention/__init__.py
+  s_d2003be81f3894::t_909f56e78b1d69 9-12,14-23,60-131
+python/sglang/kernels/ops/attention/qsa_indexer.py
+  s_d2003be81f3894::t_ae85991250128a 1-176
+python/sglang/kernels/ops/elementwise/fast_topk.py
+  s_d2003be81f3894::t_da0fb74c5ac0c4 1-70
+python/sglang/kernels/ops/elementwise/hc_combine.py
+  s_d2003be81f3894::t_69cf32606e185a 1-136
+python/sglang/kernels/ops/elementwise/hc_mix.py
+  s_d2003be81f3894::t_2337eef8f34178 1-118
+python/sglang/kernels/ops/layernorm/grouped_gemma_rmsnorm.py
+  s_d2003be81f3894::t_2c9b89b04ac8bd 1-78
+python/sglang/kernels/ops/qwen4_ple.py
+  s_d2003be81f3894::t_feafb7988ca535 1-314
+python/sglang/srt/arg_groups/model_overrides/__init__.py
+  s_d2003be81f3894::t_ec732249564799 37
+python/sglang/srt/arg_groups/model_overrides/qwen3_5.py
+  s_d2003be81f3894::t_061f5d6032ac23 26
+python/sglang/srt/arg_groups/model_overrides/qwen4_exp.py
+  s_d2003be81f3894::t_2438de12dfd368 1-65
+python/sglang/srt/arg_groups/speculative_hook.py
+  s_d2003be81f3894::t_2147e0b3b9b653 701-704
+python/sglang/srt/configs/__init__.py
+  s_d2003be81f3894::t_66adfc7847a89e 62,97-98
+python/sglang/srt/configs/model_config.py
+  s_d2003be81f3894::t_f0e9940102f96b 798-815,2014,2077-2078
+python/sglang/srt/configs/qwen3_5.py
+  s_d2003be81f3894::t_75d84db6cd36f4 21-23,32,125-126
+python/sglang/srt/configs/qwen4_exp.py
+  s_d2003be81f3894::t_9db340d39b05ae 1-169
+python/sglang/srt/configs/update_config.py
+  s_d2003be81f3894::t_83a5363e93732d 312
+python/sglang/srt/disaggregation/decode.py
+  s_d2003be81f3894::t_e556ef4d3d5064 125
+python/sglang/srt/disaggregation/utils.py
+  s_d2003be81f3894::t_e56eb3191e414e 22,75-78
+python/sglang/srt/environ.py
+  s_d2003be81f3894::t_147e9aadaffedc 301-309,1057-1063
+python/sglang/srt/layers/attention/attention_registry.py
+  s_d2003be81f3894::t_2b320a20b1e3db 147-155,465-473
+python/sglang/srt/layers/attention/hybrid_linear_attn_backend.py
+  s_d2003be81f3894::t_15e70ceee6777c 14,341-346,1072-1078,1090-1094,1098-1102,1376-1467
+python/sglang/srt/layers/attention/qsa/__init__.py
+  s_d2003be81f3894::t_0d8715045a37c1 1-40
+python/sglang/srt/layers/attention/qsa/config.py
+  s_d2003be81f3894::t_4454725eddae40 1-201
+python/sglang/srt/layers/attention/qsa/dsa_indexer.py
+  s_d2003be81f3894::t_70a24991aac053 1-369
+python/sglang/srt/layers/attention/qsa/glue.py
+  s_d2003be81f3894::t_c6ffb180f0a346 1-107
+python/sglang/srt/layers/attention/qsa/graph_metadata.py
+  s_d2003be81f3894::t_9e775d62522db3 1-241
+python/sglang/srt/layers/attention/qsa/kernel.py
+  s_d2003be81f3894::t_40514f6c6ac61e 1-354
+python/sglang/srt/layers/attention/qsa/metadata.py
+  s_d2003be81f3894::t_0d954a9eb768bb 1-334
+python/sglang/srt/layers/attention/qsa/mqa.py
+  s_d2003be81f3894::t_b780021b73ee8c 1-422
+python/sglang/srt/layers/attention/qsa/qsa_indexer.py
+  s_d2003be81f3894::t_a321f557722c0b 1-652
+python/sglang/srt/layers/attention/qsa/sparse_attn.py
+  s_d2003be81f3894::t_30bd216c7a7021 1-456
+python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
+  s_d2003be81f3894::t_f8a32ce3ea9749 1-1883
+python/sglang/srt/layers/hc_mix_triton.py
+  s_d2003be81f3894::t_edddad7720ebe6 1-243
+python/sglang/srt/layers/hyperconnection.py
+  s_d2003be81f3894::t_fa0c5d83b28932 1-342
+python/sglang/srt/layers/moe/moe_runner/triton_utils/configs/triton_3_7_1/E=512,N=160,device_name=NVIDIA_H200.json
+  s_d2003be81f3894::t_57d9dd180cd6e9 1-74
+python/sglang/srt/layers/moe/moe_runner/triton_utils/configs/triton_3_7_1/E=512,N=320,device_name=NVIDIA_H200.json
+  s_d2003be81f3894::t_1e1d67edafb73b 1-74
+python/sglang/srt/layers/moe/moe_runner/triton_utils/configs/triton_3_7_1/E=512,N=80,device_name=NVIDIA_H200.json
+  s_d2003be81f3894::t_d5db151ab23e91 1-74
+python/sglang/srt/layers/rotary_embedding/mrope_rope_index.py
+  s_d2003be81f3894::t_b38a3ee22916b8 77,164
+python/sglang/srt/layers/vocab_parallel_embedding.py
+  s_d2003be81f3894::t_2d356b75a34041 237,248,542-545,548,557-559,571-572
+python/sglang/srt/managers/mm_utils.py
+  s_d2003be81f3894::t_0875d0d45ec0b5 739-747
+python/sglang/srt/mem_cache/allocator/base.py
+  s_d2003be81f3894::t_0e8ecd893db3c2 28-29
+python/sglang/srt/mem_cache/kv_cache_configurator.py
+  s_d2003be81f3894::t_4750ad0017c9fa 1070-1083,1095,1251,1761,1825-1854,2062
+python/sglang/srt/mem_cache/mamba_radix_cache.py
+  s_d2003be81f3894::t_dfa2b57b97680f 100-101
+python/sglang/srt/mem_cache/memory_pool.py
+  s_d2003be81f3894::t_09f9b70c3edd50 375-385,974-975,1052-1053,1068,1076-1077,1080-1081,1085-1091,1116-1118,1248-1251,1279-1282,1299-1302,1324-1356,1370-1379,1524-1549,1706-1707
+python/sglang/srt/mem_cache/ple_state_pool.py
+  s_d2003be81f3894::t_30f915757a6e17 1-224
+python/sglang/srt/mem_cache/qsa_kv_pool.py
+  s_d2003be81f3894::t_bfce0c2a484c3c 1-343
+python/sglang/srt/mem_cache/unified_memory_pool.py
+  s_d2003be81f3894::t_bfe44e0ae9caa3 1062-1065,1071-1090
+python/sglang/srt/model_executor/forward_batch_info.py
+  s_d2003be81f3894::t_2bca9eb26dec00 58,436-440,1032-1056
+python/sglang/srt/model_executor/model_runner_components/load_model_utils.py
+  s_d2003be81f3894::t_b38bd6a347c678 268-280,328-329
+python/sglang/srt/model_executor/pool_configurator.py
+  s_d2003be81f3894::t_33f70576f7e7e3 424-426,429-457,499
+python/sglang/srt/models/qwen3_5.py
+  s_d2003be81f3894::t_f491fe98b4b0c6 70-73,106,394-395,654-683,693-708,939-941,958,1179-1180,1191,1381,1386-1388,1390,1394-1395,1399,1404,1408-1425,1541-1542,1624,1629,1701-1712
+python/sglang/srt/models/qwen3_vl.py
+  s_d2003be81f3894::t_5295ef759c4979 1369-1375
+python/sglang/srt/models/qwen4_exp.py
+  s_d2003be81f3894::t_9c249df3ae6596 1-2132
+python/sglang/srt/models/qwen4_exp_mtp.py
+  s_d2003be81f3894::t_10248dc3b654ae 1-226
+python/sglang/srt/multimodal/processors/qwen_vl.py
+  s_d2003be81f3894::t_01cf1290509e80 34,304,316,527,664,773
+python/sglang/srt/server_args.py
+  s_d2003be81f3894::t_f8afa64a8ac4b9 178,2679-2689,4159-4171,4174
+python/sglang/srt/speculative/draft_utils.py
+  s_d2003be81f3894::t_be2400247f3019 84-86,118-135,180-199
+python/sglang/srt/speculative/eagle_draft_cuda_graph_runner.py
+  s_d2003be81f3894::t_32c2c77cf49a6e 671-672,674
+python/sglang/srt/speculative/eagle_worker_v2.py
+  s_d2003be81f3894::t_010283cf4b3d9f 24,135-147,373,376-442,552-558
+python/sglang/srt/speculative/multi_layer_eagle_worker_v2.py
+  s_d2003be81f3894::t_fe40a6fe7ea80e 367-375
+python/sglang/srt/speculative/spec_utils.py
+  s_d2003be81f3894::t_e6d6e3e82b73c2 810-826
+python/sglang/srt/utils/common.py
+  s_d2003be81f3894::t_08ec96cab13c85 319-324
+python/sglang/srt/utils/hf_transformers/common.py
+  s_d2003be81f3894::t_2d79d2c9a285be 72-73,121-122
+python/sglang/test/simple_eval_aime26.py
+  s_d2003be81f3894::t_63fb8859f9bf5f 1-24
+python/sglang/test/simple_eval_common.py
+  s_d2003be81f3894::t_4e30ff4066fe79 441-451
+test/registered/kernels/benchmark/attention/bench_qsa_indexer.py
+  s_d2003be81f3894::t_a649d218539667 1-217
+test/registered/kernels/benchmark/elementwise/bench_fast_topk.py
+  s_d2003be81f3894::t_d12604a0a53087 1-45
+test/registered/kernels/benchmark/elementwise/bench_hc_combine.py
+  s_d2003be81f3894::t_73d486adec9585 1-62
+test/registered/kernels/benchmark/layernorm/bench_grouped_gemma_rmsnorm.py
+  s_d2003be81f3894::t_ea0990639e2b8b 1-48
+test/registered/kernels/benchmark/layernorm/bench_qwen4_ple_norm.py
+  s_d2003be81f3894::t_eb5f0b92c9908c 1-49
+test/registered/kernels/ops/attention/test_qkvzba_split_ratio3.py
+  s_d2003be81f3894::t_1fdb2aa0c10bf7 1-75
+test/registered/kernels/ops/attention/test_qsa_indexer.py
+  s_d2003be81f3894::t_769af4fa7ecf12 1-422
+test/registered/kernels/ops/elementwise/test_fast_topk.py
+  s_d2003be81f3894::t_1e3432aeffc870 1-145
+test/registered/kernels/ops/elementwise/test_hc_combine.py
+  s_d2003be81f3894::t_e34980bcde4c65 1-213
+test/registered/kernels/ops/embeddings/test_qwen4_ple_offload.py
+  s_d2003be81f3894::t_e5b28528ca84cf 1-194
+test/registered/kernels/ops/embeddings/test_qwen4_ple_offload_tp4.py
+  s_d2003be81f3894::t_5235b057790350 1-109
+test/registered/kernels/ops/layernorm/test_grouped_gemma_rmsnorm.py
+  s_d2003be81f3894::t_0a655bc8c8bab8 1-114
+test/registered/kernels/ops/layernorm/test_qwen4_ple_norm.py
+  s_d2003be81f3894::t_c3d361c2699849 1-125
+test/registered/kernels/test_hc_mix_triton.py
+  s_d2003be81f3894::t_129688e8b1076d 1-85
+test/registered/kernels/test_kda_qsa_sm121.py
+  s_d2003be81f3894::t_17c91a5a97d1c8 1-182
+test/registered/kernels/test_qsa.py
+  s_d2003be81f3894::t_14489cd1b04847 1-2329
+test/registered/kernels/test_qsa_mtp_shared_indexer.py
+  s_d2003be81f3894::t_701dca677ebaa8 1-265
+test/registered/kernels/test_qwen4_ple_fusion.py
+  s_d2003be81f3894::t_9bc38ccac1f842 1-122
+test/registered/kernels/test_verify_commit_triton.py
+  s_d2003be81f3894::t_719e6de7aade04 1-79
+test/registered/unit/mem_cache/test_mamba_unittest.py
+  s_d2003be81f3894::t_741da39fc752cd 634-791
+test/registered/unit/mem_cache/test_qsa_compressed_addressing.py
+  s_d2003be81f3894::t_847960d46ba424 1-137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b9c9684a4fcdce0bd1c88a54c8314e8a4feb94e3",
+  "prompts": {},
+  "sessions": {
+    "s_d2003be81f3894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58966894-6f93-4eec-b9ca-c71c949a6b43",
+        "model": "claude-opus-5"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

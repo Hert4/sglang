@@ -175,6 +175,7 @@ ATTENTION_BACKEND_CHOICES = [
     "flex_attention",
     "dsa",
     "nsa",  # Deprecated alias for "dsa"
+    "qsa",
     "dsv4",
     "compressed",  # Deprecated alias for "dsv4"
     # NVIDIA specific
@@ -2675,6 +2676,17 @@ class ServerArgs:
         ),
         NS("exec.mamba"),
     ] = None
+    ple_offload_embedding: A[
+        Optional[bool],
+        Arg(
+            help="Offload Qwen4 PLE n-gram embedding weights to CPU pinned "
+            "memory. Enabled by default for BF16 Qwen4-Exp on CUDA; use "
+            "--no-ple-offload-embedding to disable.",
+            action=argparse.BooleanOptionalAction,
+            resolvable=True,
+        ),
+        NS("exec.offload"),
+    ] = None
     linear_attn_verify_backend: A[
         Optional[str],
         Arg(
@@ -4144,8 +4156,22 @@ class ServerArgs:
     def enable_mamba_extra_buffer_lazy(self) -> bool:
         return mamba_extra_buffer_lazy_of(resolving_view(self))
 
+    def _handle_offload_compatibility(self):
+        """Giu lai tu PR #36497: cay moi bo co che handler cu nen loi goi bien
+        mat cung no. Ghim PLE vao RAM host roi lai bat offload lop chung se
+        keo bang PLE nguoc len thiet bi."""
+        if self.ple_offload_embedding and (
+            self.cpu_offload_gb > 0 or self.offload_group_size > 0
+        ):
+            raise ValueError(
+                "--ple-offload-embedding cannot be combined with "
+                "--cpu-offload-gb or --offload-group-size: generic layer offload "
+                "would stage the pinned PLE embedding back to the device."
+            )
+
     def check_server_args(self):
         from sglang.srt.arg_groups.validation_hook import check_server_args
+        self._handle_offload_compatibility()
 
         check_server_args(self)
 

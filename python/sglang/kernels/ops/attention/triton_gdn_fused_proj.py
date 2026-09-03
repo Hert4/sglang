@@ -171,6 +171,13 @@ def fused_qkvzba_split_reshape_cat_contiguous_kernel(
     a,
     mixed_qkvz,
     mixed_ba,
+    # Row stride cua mixed_qkvz/mixed_ba (phan tu). KHONG duoc coi bang
+    # TOTAL_QKVZ/TOTAL_BA: finalize_fused_in_proj (qwen3_5.py) tra ve LAT CAT
+    # cot cua mot GEMM gop, row stride = tong chieu rong. Hang 0 luon dung
+    # (0*stride) nen loi chi lo tu token thu 2 -> 'prompt 1 token dung, dai
+    # hon thi rac'. PR #36497 co san 2 tham so nay; main bo di.
+    qkvz_row_stride,
+    ba_row_stride,
     NUM_HEADS_QK: tl.constexpr,
     NUM_HEADS_V: tl.constexpr,
     HEAD_QK: tl.constexpr,
@@ -193,11 +200,11 @@ def fused_qkvzba_split_reshape_cat_contiguous_kernel(
 
     # ── Read from contiguous input ──
     # q for head group i_qk: in the all_q region, offset i_qk * HEAD_QK
-    blk_q_ptr = mixed_qkvz + i_bs * TOTAL_QKVZ + i_qk * HEAD_QK + tl.arange(0, HEAD_QK)
+    blk_q_ptr = mixed_qkvz + i_bs * qkvz_row_stride + i_qk * HEAD_QK + tl.arange(0, HEAD_QK)
     # k for head group i_qk: in the all_k region
     blk_k_ptr = (
         mixed_qkvz
-        + i_bs * TOTAL_QKVZ
+        + i_bs * qkvz_row_stride
         + TOTAL_Q
         + i_qk * HEAD_QK
         + tl.arange(0, HEAD_QK)
@@ -209,7 +216,7 @@ def fused_qkvzba_split_reshape_cat_contiguous_kernel(
     # vector access. V_POW2 arrives as a wrapper-computed constexpr so the
     # dead branch is pruned before tl.arange validation.
     v_ld_base = (
-        mixed_qkvz + i_bs * TOTAL_QKVZ + TOTAL_Q + TOTAL_K + i_qk * V_PER_GROUP * HEAD_V
+        mixed_qkvz + i_bs * qkvz_row_stride + TOTAL_Q + TOTAL_K + i_qk * V_PER_GROUP * HEAD_V
     )
     z_ld_base = v_ld_base + TOTAL_V
 
@@ -250,12 +257,12 @@ def fused_qkvzba_split_reshape_cat_contiguous_kernel(
 
     # ── b and a from contiguous [all_b | all_a] ──
     for i in tl.static_range(V_PER_GROUP):
-        blk_b_ptr = mixed_ba + i_bs * TOTAL_BA + i_qk * V_PER_GROUP + i
+        blk_b_ptr = mixed_ba + i_bs * ba_row_stride + i_qk * V_PER_GROUP + i
         blk_b_st_ptr = b + i_bs * NUM_HEADS_V + i_qk * V_PER_GROUP + i
         tl.store(blk_b_st_ptr, tl.load(blk_b_ptr))
 
     for i in tl.static_range(V_PER_GROUP):
-        blk_a_ptr = mixed_ba + i_bs * TOTAL_BA + NUM_HEADS_V + i_qk * V_PER_GROUP + i
+        blk_a_ptr = mixed_ba + i_bs * ba_row_stride + NUM_HEADS_V + i_qk * V_PER_GROUP + i
         blk_a_st_ptr = a + i_bs * NUM_HEADS_V + i_qk * V_PER_GROUP + i
         tl.store(blk_a_st_ptr, tl.load(blk_a_ptr))
 
@@ -301,6 +308,9 @@ def fused_qkvzba_split_reshape_cat_contiguous(
     if _is_hip and batch * seq_len == 0:
         return mixed_qkv, z, b, a
     v_per_group = num_heads_v // num_heads_qk
+    assert mixed_qkvz.stride(-1) == 1 and mixed_ba.stride(-1) == 1, (
+        "fused_qkvzba unpack: dim cuoi phai lien khoi"
+    )
     grid = (batch * seq_len, num_heads_qk)
     # Each program moves `v_per_group * head_v` elements for both v and z. For
     # the small head-group ratios (<= 512 elements) a single warp is the best
@@ -319,6 +329,8 @@ def fused_qkvzba_split_reshape_cat_contiguous(
         a,
         mixed_qkvz,
         mixed_ba,
+        mixed_qkvz.stride(0),
+        mixed_ba.stride(0),
         num_heads_qk,
         num_heads_v,
         head_qk,

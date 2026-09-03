@@ -1,0 +1,19 @@
+python/sglang/kernels/ops/attention/triton_gdn_fused_proj.py
+  s_d2003be81f3894::t_364925200e5918 174-180,203,207,219,260,265,311-313,332-333
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b0dfde640ecedd77c6f3ebad06980f2829081c1a",
+  "prompts": {},
+  "sessions": {
+    "s_d2003be81f3894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58966894-6f93-4eec-b9ca-c71c949a6b43",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

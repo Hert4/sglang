@@ -498,6 +498,7 @@ _MAMBA_RADIX_CACHE_ARCHS = frozenset(
         "InternS2PreviewForConditionalGeneration",
         "InternS2MobiusForConditionalGeneration",
         "Qwen3_5ForConditionalGeneration",
+        "Qwen4ExpForConditionalGeneration",
         # Text-only entries of the same hybrid stack (models/qwen3_5_text.py);
         # Qwen3.8-2.4T-A95B ships as Qwen3_5MoeForCausalLM.
         "Qwen3_5MoeForCausalLM",
@@ -521,6 +522,7 @@ _MAMBA_EXTRA_BUFFER_ARCHS = frozenset(
     {
         "KimiLinearForCausalLM",
         "Qwen3_5ForConditionalGeneration",
+        "Qwen4ExpForConditionalGeneration",
         "Qwen3_5MoeForConditionalGeneration",
         # Text-only entries of the same hybrid stack (models/qwen3_5_text.py);
         # Qwen3.8-2.4T-A95B ships as Qwen3_5MoeForCausalLM.
@@ -961,6 +963,7 @@ _FLASHINFER_ALLREDUCE_FUSION_ARCHS = frozenset(
         "Qwen3_5MoeForConditionalGeneration",
         "InternS2PreviewForConditionalGeneration",
         "Qwen3_5ForConditionalGeneration",
+        "Qwen4ExpForConditionalGeneration",
         "NemotronHForCausalLM",
         "NemotronHPuzzleForCausalLM",
     }

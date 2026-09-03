@@ -3,9 +3,11 @@
 Architectures: Qwen4ExpForConditionalGeneration
 
 Chuyen tu ban inline cua PR #36497 sang package model_overrides/ ma upstream
-gioi thieu sau do. Cac truong khai o day (ple_offload_embedding,
-moe_dense_tp_size, page_size) KHONG trung voi truong ma qwen3_5.py khai cho
-cung kien truc (attention backend) -- dieu kien bat buoc cua package nay.
+gioi thieu sau do. CANH BAO: module nay VA qwen3_5.py cung khai `page_size` cho kien truc nay.
+Package cam hai module khai cung mot truong, nhung validate_declarations chi
+kiem whitelist TEN nen khong bat duoc. Tren H200/SM90 vo hai vi
+_qwen3_5_hybrid_overrides return {} ngay (no chi chay tren SM100). Neu chay
+tren SM100 thi phai tach lai: quyet dinh ai so huu page_size cho Qwen4-Exp.
 """
 
 import logging

@@ -268,15 +268,19 @@ def load_model_with_memory_saver(
     if not is_draft_worker:
         architectures = model_config.hf_config.architectures or []
         is_qwen4_exp = "Qwen4ExpForConditionalGeneration" in architectures
-        if server_args.ple_offload_embedding and not is_qwen4_exp:
+        # Doc qua bag da resolve chu KHONG doc thuoc tinh tho tren server_args:
+        # truong nay khai `resolvable=True, NS("exec.offload")`, va kien truc moi
+        # khong ghi nguoc gia tri da giai ve field. Doc tho se bo qua mac dinh tu
+        # dong ma _qwen4_exp_overrides dat (BF16+CUDA -> True), khien bang PLE
+        # ~102 GB o lai GPU va OOM tren 1xH200 mot cach am tham.
+        ple_offload = get_exec().offload.ple_offload_embedding
+        if ple_offload and not is_qwen4_exp:
             raise ValueError(
                 "--ple-offload-embedding only supports "
                 "Qwen4ExpForConditionalGeneration"
             )
         if is_qwen4_exp:
-            model_config.hf_text_config.ple_offload_embedding = (
-                server_args.ple_offload_embedding
-            )
+            model_config.hf_text_config.ple_offload_embedding = ple_offload
 
     enable_cpu_backup = get_exec().features.enable_weights_cpu_backup or (
         is_draft_worker and get_exec().features.enable_draft_weights_cpu_backup
@@ -325,7 +329,11 @@ def load_model_with_memory_saver(
             remote_instance_weight_info = (
                 loader.remote_instance_transfer_engine_weight_info
             )
-    if not is_draft_worker and server_args.ple_offload_embedding and device == "cuda":
+    if (
+        not is_draft_worker
+        and get_exec().offload.ple_offload_embedding
+        and device == "cuda"
+    ):
         current_platform.empty_cache()
     # Cache needs to be cleared after loading model weights (in the loader.load_model function).
     # To avoid conflict with memory_saver_adapter.region, empty_cache operation is now moved here.

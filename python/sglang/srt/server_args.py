@@ -4160,8 +4160,11 @@ class ServerArgs:
         """Giu lai tu PR #36497: cay moi bo co che handler cu nen loi goi bien
         mat cung no. Ghim PLE vao RAM host roi lai bat offload lop chung se
         keo bang PLE nguoc len thiet bi."""
-        if self.ple_offload_embedding and (
-            self.cpu_offload_gb > 0 or self.offload_group_size > 0
+        from sglang.srt.arg_groups.model_override_base import resolving_view
+
+        cfg = resolving_view(self)
+        if cfg.ple_offload_embedding and (
+            cfg.cpu_offload_gb > 0 or cfg.offload_group_size > 0
         ):
             raise ValueError(
                 "--ple-offload-embedding cannot be combined with "

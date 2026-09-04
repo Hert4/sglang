@@ -493,6 +493,8 @@ def handle_model_specific_adjustments(server_args: Any):
             # CHUA xac minh dung dan tren GPU - chi de bench, xem gemma4-26b-bench.
             "flashprefill",
             "fa3",
+            "flashinfer",
+            "fa4",
         )
         assert (
             prefill_backend in accepted_backends and decode_backend in accepted_backends

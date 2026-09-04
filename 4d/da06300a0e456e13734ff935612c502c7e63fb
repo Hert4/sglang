@@ -1,0 +1,19 @@
+python/sglang/srt/layers/attention/flashinfer_backend.py
+  s_d2003be81f3894::t_a0e13e9d3e5c70 1227,1559-1580,1694,1735,1752,1754,1822-1823,1841-1842,1871-1892,2084,2182,2208,2210,2288-2289,2368-2369
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "4dda06300a0e456e13734ff935612c502c7e63fb",
+  "prompts": {},
+  "sessions": {
+    "s_d2003be81f3894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58966894-6f93-4eec-b9ca-c71c949a6b43",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+python/sglang/srt/arg_groups/model_hook.py
+  s_d2003be81f3894::t_8e1d2e4c04d379 491-495
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "3304c622f8da9ec2f9e2cd102fa08bf75ce5fdd2",
+  "prompts": {},
+  "sessions": {
+    "s_d2003be81f3894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58966894-6f93-4eec-b9ca-c71c949a6b43",
+        "model": "unknown"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

@@ -1570,13 +1570,24 @@ class FlashInferIndicesUpdaterDecode:
             getattr(attn_backend, "dispatch_reason", None) == WrapperDispatch.SLIDING_WINDOW
             and len(self._wrapper_geom) == 2
         ):
+            # Sau remap cua utils/hf_transformers/config.py (Gemma4): base
+            # head_dim/num_key_value_heads = lop FULL (512/2), swa_* = lop
+            # sliding (256/8). Nhung model_config.get_num_kv_heads() lai tra
+            # ve swa_num_key_value_heads, nen bo mac dinh (head_dim, num_kv)
+            # = (512, 8) sai cho CA HAI loai lop. Wrapper 0 = sliding, 1 = full.
             _hf = model_runner.model_config.hf_text_config
-            _ghd = getattr(_hf, "global_head_dim", None)
-            _gkv = getattr(_hf, "num_global_key_value_heads", None)
-            if _ghd or _gkv:
+            _tp = get_parallel().attn_tp_size
+            _swa_hd = getattr(_hf, "swa_head_dim", None)
+            _swa_kv = getattr(_hf, "swa_num_key_value_heads", None)
+            _full_kv = getattr(_hf, "num_key_value_heads", None)
+            if _swa_hd or _swa_kv:
+                self._wrapper_geom[0] = (
+                    _swa_hd or self.head_dim,
+                    max(1, _swa_kv // _tp) if _swa_kv else self.num_kv_heads,
+                )
                 self._wrapper_geom[1] = (
-                    _ghd or self.head_dim,
-                    max(1, _gkv // get_parallel().attn_tp_size) if _gkv else self.num_kv_heads,
+                    self.head_dim,
+                    max(1, _full_kv // _tp) if _full_kv else self.num_kv_heads,
                 )
         self.data_type = attn_backend.flashinfer_kv_cache_dtype
         self.q_data_type = model_runner.dtype
@@ -1882,13 +1893,24 @@ class FlashInferIndicesUpdaterPrefill:
             getattr(attn_backend, "dispatch_reason", None) == WrapperDispatch.SLIDING_WINDOW
             and len(self._wrapper_geom) == 2
         ):
+            # Sau remap cua utils/hf_transformers/config.py (Gemma4): base
+            # head_dim/num_key_value_heads = lop FULL (512/2), swa_* = lop
+            # sliding (256/8). Nhung model_config.get_num_kv_heads() lai tra
+            # ve swa_num_key_value_heads, nen bo mac dinh (head_dim, num_kv)
+            # = (512, 8) sai cho CA HAI loai lop. Wrapper 0 = sliding, 1 = full.
             _hf = model_runner.model_config.hf_text_config
-            _ghd = getattr(_hf, "global_head_dim", None)
-            _gkv = getattr(_hf, "num_global_key_value_heads", None)
-            if _ghd or _gkv:
+            _tp = get_parallel().attn_tp_size
+            _swa_hd = getattr(_hf, "swa_head_dim", None)
+            _swa_kv = getattr(_hf, "swa_num_key_value_heads", None)
+            _full_kv = getattr(_hf, "num_key_value_heads", None)
+            if _swa_hd or _swa_kv:
+                self._wrapper_geom[0] = (
+                    _swa_hd or self.head_dim,
+                    max(1, _swa_kv // _tp) if _swa_kv else self.num_kv_heads,
+                )
                 self._wrapper_geom[1] = (
-                    _ghd or self.head_dim,
-                    max(1, _gkv // get_parallel().attn_tp_size) if _gkv else self.num_kv_heads,
+                    self.head_dim,
+                    max(1, _full_kv // _tp) if _full_kv else self.num_kv_heads,
                 )
         self.data_type = attn_backend.flashinfer_kv_cache_dtype
         self.q_data_type = model_runner.dtype

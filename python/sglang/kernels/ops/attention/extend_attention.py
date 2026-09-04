@@ -706,7 +706,12 @@ def _fwd_kernel(
             final_mask &= window_mask
 
         SKIP_TILE = False
-        if USE_CUSTOM_MASK or SLIDING_WINDOW_SIZE > 0:
+        # P2 (swa3, tmduc): tren duong sliding window, P1 da chan vong lap dung
+        # theo cua so nen khong con tile chet nao de SKIP_TILE bat; bo de khoi
+        # dung mask BLOCK_M x BLOCK_N + reduction 2 tang o moi tile. Giu cho
+        # custom mask (spec decode co the giet o bat ky). Tile bien cua so
+        # van duoc window_mask che, chi mat early-out.
+        if USE_CUSTOM_MASK:
             SKIP_TILE = tl.max(tl.max(final_mask.to(tl.int32), axis=1), axis=0) == 0
 
         if not SKIP_TILE:

@@ -1224,7 +1224,7 @@ class FlashInferAttnBackend(AttentionBackend):
             max_num_tokens,
             num_qo_heads=upd.num_qo_heads,
             num_kv_heads=upd.num_kv_heads,
-            head_dim=upd.head_dim,
+            head_dim=max(g[0] for g in upd._wrapper_geom),
             device=device,
         )
         logger.info(
@@ -1556,6 +1556,28 @@ class FlashInferIndicesUpdaterDecode:
             get_parallel().attn_tp_size, get_parallel().attn_dcp_size
         )
         self.head_dim = model_runner.model_config.head_dim
+        # tmduc (r6): plan TUNG wrapper theo hinh hoc cua lop no phuc vu. Gemma4:
+        # wrapper 0 = sliding (head_dim 256, 8 KV head), wrapper 1 = global
+        # (global_head_dim 512, num_global_key_value_heads 2). Truoc day moi
+        # wrapper deu plan bang head_dim/num_kv_heads cua model_config -> module
+        # JIT va workspace sai kich thuoc cho lop global -> loi CUDA bat dong bo
+        # (CUBLAS_STATUS_EXECUTION_FAILED o GEMM ke tiep). num_qo_heads da duoc
+        # upstream over-plan bang max nen giu nguyen.
+        self._wrapper_geom = [(self.head_dim, self.num_kv_heads)] * max(
+            1, getattr(attn_backend, "num_wrappers", 1)
+        )
+        if (
+            getattr(attn_backend, "dispatch_reason", None) == WrapperDispatch.SLIDING_WINDOW
+            and len(self._wrapper_geom) == 2
+        ):
+            _hf = model_runner.model_config.hf_text_config
+            _ghd = getattr(_hf, "global_head_dim", None)
+            _gkv = getattr(_hf, "num_global_key_value_heads", None)
+            if _ghd or _gkv:
+                self._wrapper_geom[1] = (
+                    _ghd or self.head_dim,
+                    max(1, _gkv // get_parallel().attn_tp_size) if _gkv else self.num_kv_heads,
+                )
         self.data_type = attn_backend.flashinfer_kv_cache_dtype
         self.q_data_type = model_runner.dtype
         self.sliding_window_size = model_runner.sliding_window_size
@@ -1669,6 +1691,7 @@ class FlashInferIndicesUpdaterDecode:
                 fixed_split_size=fixed_split_size,
                 disable_split_kv=disable_split_kv,
                 kv_view=kv_view,
+                wrapper_id=wrapper_id,
             )
 
     def update_cross_attention(
@@ -1709,6 +1732,7 @@ class FlashInferIndicesUpdaterDecode:
                 fixed_split_size=fixed_split_size,
                 disable_split_kv=disable_split_kv,
                 kv_view=kv_view,
+                wrapper_id=wrapper_id,
             )
 
     def call_begin_forward(
@@ -1725,7 +1749,9 @@ class FlashInferIndicesUpdaterDecode:
         disable_split_kv: Optional[bool] = None,
         *,
         kv_view: KVIndexTable,
+        wrapper_id: int = 0,
     ):
+        head_dim, num_kv_heads = self._wrapper_geom[wrapper_id]
         # Unified SWA wrapper-0: gather from the swa canonical directly -- its
         # entries are already swa-side kernel-facing ids, so the in-place
         # full->swa translate below must not run on top of them.
@@ -1793,8 +1819,8 @@ class FlashInferIndicesUpdaterDecode:
                 kv_indices,
                 self.kv_last_page_len[:bs],
                 self.num_qo_heads,
-                self.num_kv_heads,
-                self.head_dim,
+                num_kv_heads,
+                head_dim,
                 1,
                 data_type=self.data_type,
                 q_data_type=self.q_data_type,
@@ -1812,8 +1838,8 @@ class FlashInferIndicesUpdaterDecode:
                 kv_indices,
                 self.kv_last_page_len[:bs],
                 self.num_qo_heads,
-                self.num_kv_heads,
-                self.head_dim,
+                num_kv_heads,
+                head_dim,
                 1,
                 data_type=self.data_type,
                 q_data_type=self.q_data_type,
@@ -1842,6 +1868,28 @@ class FlashInferIndicesUpdaterPrefill:
             get_parallel().attn_tp_size, get_parallel().attn_dcp_size
         )
         self.head_dim = model_runner.model_config.head_dim
+        # tmduc (r6): plan TUNG wrapper theo hinh hoc cua lop no phuc vu. Gemma4:
+        # wrapper 0 = sliding (head_dim 256, 8 KV head), wrapper 1 = global
+        # (global_head_dim 512, num_global_key_value_heads 2). Truoc day moi
+        # wrapper deu plan bang head_dim/num_kv_heads cua model_config -> module
+        # JIT va workspace sai kich thuoc cho lop global -> loi CUDA bat dong bo
+        # (CUBLAS_STATUS_EXECUTION_FAILED o GEMM ke tiep). num_qo_heads da duoc
+        # upstream over-plan bang max nen giu nguyen.
+        self._wrapper_geom = [(self.head_dim, self.num_kv_heads)] * max(
+            1, getattr(attn_backend, "num_wrappers", 1)
+        )
+        if (
+            getattr(attn_backend, "dispatch_reason", None) == WrapperDispatch.SLIDING_WINDOW
+            and len(self._wrapper_geom) == 2
+        ):
+            _hf = model_runner.model_config.hf_text_config
+            _ghd = getattr(_hf, "global_head_dim", None)
+            _gkv = getattr(_hf, "num_global_key_value_heads", None)
+            if _ghd or _gkv:
+                self._wrapper_geom[1] = (
+                    _ghd or self.head_dim,
+                    max(1, _gkv // get_parallel().attn_tp_size) if _gkv else self.num_kv_heads,
+                )
         self.data_type = attn_backend.flashinfer_kv_cache_dtype
         self.q_data_type = model_runner.dtype
         self.sliding_window_size = model_runner.sliding_window_size
@@ -2033,6 +2081,7 @@ class FlashInferIndicesUpdaterPrefill:
                     else -1
                 ),
                 kv_view=kv_view,
+                wrapper_id=wrapper_id,
             )
 
     def _build_swa_prefix_custom_mask(
@@ -2130,6 +2179,7 @@ class FlashInferIndicesUpdaterPrefill:
                     cross_attention_custom_mask if wrapper_id == 1 else None
                 ),
                 kv_view=kv_view,
+                wrapper_id=wrapper_id,
             )
 
     def call_begin_forward(
@@ -2155,7 +2205,9 @@ class FlashInferIndicesUpdaterPrefill:
         window_left: int = -1,
         *,
         kv_view: KVIndexTable,
+        wrapper_id: int = 0,
     ):
+        head_dim, num_kv_heads = self._wrapper_geom[wrapper_id]
         bs = len(seq_lens)
         # Unified SWA wrapper-0: gather from the swa canonical directly -- its
         # entries are already swa-side kernel-facing ids, so the in-place
@@ -2233,8 +2285,8 @@ class FlashInferIndicesUpdaterPrefill:
                 qo_indptr,
                 qo_indptr,
                 self.num_qo_heads,
-                self.num_kv_heads,
-                self.head_dim,
+                num_kv_heads,
+                head_dim,
                 q_data_type=self.q_data_type,
             )
 
@@ -2313,8 +2365,8 @@ class FlashInferIndicesUpdaterPrefill:
             kv_indices,
             self.kv_last_page_len[:bs],
             self.num_qo_heads,
-            self.num_kv_heads,
-            self.head_dim,
+            num_kv_heads,
+            head_dim,
             1,
             q_data_type=self.q_data_type,
             kv_data_type=self.data_type,

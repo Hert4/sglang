@@ -488,6 +488,11 @@ def handle_model_specific_adjustments(server_args: Any):
             "ascend",
             "intel_xpu",
             "intel_amx",
+            # tmduc (r3): thu nghiem FlashPrefill V2 cho Gemma4. Prefill di
+            # flashprefill (lop SWA giao cho fa3 ben trong), decode van triton.
+            # CHUA xac minh dung dan tren GPU - chi de bench, xem gemma4-26b-bench.
+            "flashprefill",
+            "fa3",
         )
         assert (
             prefill_backend in accepted_backends and decode_backend in accepted_backends

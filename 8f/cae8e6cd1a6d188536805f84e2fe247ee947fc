@@ -1,0 +1,19 @@
+python/sglang/kernels/ops/attention/extend_attention.py
+  s_d2003be81f3894::t_6a5ab4e542b19c 150-177,908
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "8fcae8e6cd1a6d188536805f84e2fe247ee947fc",
+  "prompts": {},
+  "sessions": {
+    "s_d2003be81f3894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58966894-6f93-4eec-b9ca-c71c949a6b43",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

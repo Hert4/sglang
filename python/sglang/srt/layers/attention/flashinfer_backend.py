@@ -14,6 +14,7 @@ FlashInfer is faster and Triton is easier to customize.
 Each backend supports two operators: extend (i.e. prefill with cached prefix) and decode.
 """
 
+import inspect
 import logging
 import os
 from dataclasses import dataclass
@@ -2292,13 +2293,20 @@ class FlashInferIndicesUpdaterPrefill:
                     )
                 )
             else:
-                kv_indices, kv_indptr, qo_indptr, custom_mask = (
-                    spec_info.generate_attn_arg_prefill(
-                        req_pool_indices,
-                        paged_kernel_lens,
-                        paged_kernel_lens_sum,
-                        self.req_to_token,
-                    )
+                # tmduc: wrapper sliding cat KV ve cua so cuoi -> spec info phai
+                # gom KV tu kv_start_idx va cat lai tree mask (Eagle/FrozenKV).
+                _gen = spec_info.generate_attn_arg_prefill
+                _extra = (
+                    {"kv_start_idx": kv_start_idx}
+                    if "kv_start_idx" in inspect.signature(_gen).parameters
+                    else {}
+                )
+                kv_indices, kv_indptr, qo_indptr, custom_mask = _gen(
+                    req_pool_indices,
+                    paged_kernel_lens,
+                    paged_kernel_lens_sum,
+                    self.req_to_token,
+                    **_extra,
                 )
 
         # extend part

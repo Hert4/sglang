@@ -85,9 +85,19 @@ class EagleVerifyInput(SpecInput):
         paged_kernel_lens: torch.Tensor,
         paged_kernel_lens_sum: int,
         req_to_token: torch.Tensor,
+        kv_start_idx: Optional[torch.Tensor] = None,
     ):
+        """``kv_start_idx`` (tmduc): backend FlashInfer cat KV cua wrapper sliding
+        ve `min(seq, window)` token CUOI (pool SWA chi giu cua so). Khi do phai
+        (a) gom kv_indices tu kv_start_idx thay vi tu 0, va (b) cat lai tree mask:
+        mask goc co draft x (seq + draft) cot moi request, phan prefix toan True,
+        khoi draft x draft o cuoi hang. Thieu (a)/(b) -> verify nhin nham dau chuoi
+        va mask lech cot -> rac tu token thu 2 khi context > window (Gemma4)."""
         device = req_pool_indices.device
         batch_size = len(req_pool_indices)
+        trim_active = kv_start_idx is not None and bool((kv_start_idx > 0).any())
+        if not trim_active:
+            kv_start_idx = None
         qo_indptr = torch.arange(
             0,
             (1 + batch_size) * self.draft_token_num,
@@ -112,10 +122,14 @@ class EagleVerifyInput(SpecInput):
             req_pool_indices,
             paged_kernel_lens,
             cum_kv_seq_len,
-            None,
+            kv_start_idx,
             kv_indices,
             req_to_token.size(1),
         )
+        if trim_active:
+            return kv_indices, cum_kv_seq_len, qo_indptr, self._trimmed_tree_mask(
+                kv_start_idx, paged_kernel_lens - self.draft_token_num
+            )
         mask_numel = (
             paged_kernel_lens_sum * self.draft_token_num
             + (self.draft_token_num**2) * batch_size
@@ -136,6 +150,34 @@ class EagleVerifyInput(SpecInput):
             )
 
         return kv_indices, cum_kv_seq_len, qo_indptr, self.custom_mask
+
+    def _trimmed_tree_mask(
+        self, kv_start_idx: torch.Tensor, trim_lens: torch.Tensor
+    ) -> torch.Tensor:
+        """Cat tree mask theo cua so sliding (xem generate_attn_arg_prefill).
+        Layout FlashInfer: moi request mot khoi row-major draft x kv_len, noi tiep.
+        Goc: kv_len_i = seq_i + D voi seq_i = kv_start_idx_i + trim_i.
+        Moi: kv_len_i = trim_i + D. Prefix toan True; khoi D x D cuoi hang chep tu goc."""
+        D = self.draft_token_num
+        dev = kv_start_idx.device
+        trim = trim_lens.to(dev, torch.int64)
+        seq = kv_start_idx.to(dev, torch.int64) + trim
+        old_row = seq + D
+        new_row = trim + D
+        old_off = torch.cumsum(D * old_row, 0) - D * old_row
+        new_off = torch.cumsum(D * new_row, 0) - D * new_row
+        new_numel = int((D * new_row).sum().item())
+        new_mask = torch.ones((new_numel,), dtype=torch.bool, device=dev)
+        r = torch.arange(D, device=dev).view(1, D, 1)
+        c = torch.arange(D, device=dev).view(1, 1, D)
+        src = (old_off + seq).view(-1, 1, 1) + r * old_row.view(-1, 1, 1) + c
+        dst = (new_off + trim).view(-1, 1, 1) + r * new_row.view(-1, 1, 1) + c
+        old = self.custom_mask
+        src = src.reshape(-1)
+        valid = src < old.numel()
+        vals = torch.where(valid, old[src.clamp(max=max(old.numel() - 1, 0))], True)
+        new_mask[dst.reshape(-1)] = vals
+        return new_mask
 
 
 @dataclass

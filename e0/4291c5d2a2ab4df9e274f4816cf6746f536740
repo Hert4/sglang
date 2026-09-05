@@ -1,0 +1,19 @@
+python/sglang/kernels/ops/attention/flash_attn/cute/utils.py
+  s_d2003be81f3894::t_c87e2f0692ae7a 365-367,377-391,412-418
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "e04291c5d2a2ab4df9e274f4816cf6746f536740",
+  "prompts": {},
+  "sessions": {
+    "s_d2003be81f3894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58966894-6f93-4eec-b9ca-c71c949a6b43",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

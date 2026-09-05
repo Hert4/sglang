@@ -1,0 +1,23 @@
+python/sglang/kernels/ops/attention/flash_attn/cute/flash_fwd_sm90.py
+  s_d2003be81f3894::t_274d801dc4a60c 121-122,129,140,142-143
+python/sglang/kernels/ops/attention/flash_attn/cute/interface.py
+  s_d2003be81f3894::t_752e6a3bf09d78 121-122,204,207-209,1420
+python/sglang/kernels/ops/attention/flash_attn/cute/paged_kv.py
+  s_d2003be81f3894::t_01418fc40612d6 96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d41e58ccf88548119cb5c5455b17320b6f36c989",
+  "prompts": {},
+  "sessions": {
+    "s_d2003be81f3894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58966894-6f93-4eec-b9ca-c71c949a6b43",
+        "model": "unknown"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

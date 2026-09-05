@@ -362,9 +362,6 @@ def smid(*, loc=None, ip=None) -> Int32:
     )
 
 
-_FMAX_OLD_API = None
-
-
 @dsl_user_op
 def fmax(
     a: float | Float32,
@@ -380,14 +377,11 @@ def fmax(
     ir_c = Float32(c).ir_value(loc=loc, ip=ip) if c is not None else None
     ir_a = Float32(a).ir_value(loc=loc, ip=ip)
     ir_b = Float32(b).ir_value(loc=loc, ip=ip)
-    global _FMAX_OLD_API
-    if _FMAX_OLD_API is None:
-        import inspect
-        params = list(inspect.signature(nvvm.fmax).parameters)
-        _FMAX_OLD_API = params[0] in ("res", "result", "res_type", "result_type", "type")
-    if _FMAX_OLD_API:
+    try:
+        return Float32(nvvm.fmax(ir_a, ir_b, c=ir_c, loc=loc, ip=ip))
+    except TypeError:
+        # Older DSL API: explicit result type as first positional argument.
         return Float32(nvvm.fmax(T.f32(), ir_a, ir_b, c=ir_c, loc=loc, ip=ip))
-    return Float32(nvvm.fmax(ir_a, ir_b, c=ir_c, loc=loc, ip=ip))
 
 
 
@@ -409,13 +403,6 @@ def fmax_reduce(
         #     local_max[1] = fmax(local_max[1], res[i + 1])
         # local_max[0] = fmax(local_max[0], local_max[1])
         # return local_max[0] if const_expr(init_val is None) else fmax(local_max[0], init_val)
-        if const_expr(cute.size(x.shape) % 4 != 0):
-            # hdim-512 SM90 path (2 MMA atoms along N): per-thread row fragment is
-            # not a multiple of 4 -> plain sequential fold instead of 4-way unroll.
-            local_seq = res[0]
-            for i in cutlass.range_constexpr(1, cute.size(x.shape)):
-                local_seq = fmax(local_seq, res[i])
-            return local_seq if const_expr(init_val is None) else fmax(local_seq, init_val)
         local_max = [res[0], res[1], res[2], res[3]]
         for i in cutlass.range_constexpr(4, cute.size(x.shape), 4):
             local_max[0] = fmax(local_max[0], res[i + 0])

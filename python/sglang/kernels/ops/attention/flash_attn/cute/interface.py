@@ -118,7 +118,8 @@ def _validate_head_dims(
     is_dedicate_kernel_shape = head_dim == 256 and head_dim_v == 256
     is_standard_range = 8 <= head_dim <= 128 and 8 <= head_dim_v <= 128
 
-    is_sm90_range = 8 <= head_dim <= 256 and 8 <= head_dim_v <= 256
+    # tmduc: PR Dao-AILab/flash-attention#2422 - head_dim 512 tren SM90 (Gemma4 lop global).
+    is_sm90_range = 8 <= head_dim <= 512 and 8 <= head_dim_v <= 512
     if compute_capability == 9:
         assert (
             is_sm90_range and head_dim % alignment == 0 and head_dim_v % alignment == 0
@@ -200,9 +201,12 @@ def _tile_size_fwd_sm90(
     elif head_dim <= 192:
         tile_n = 96 if is_local else (128 if head_dim_v <= 128 else 112)
         return FwdConfig(128, tile_n, True, True)
-    else:  # hdim 256
+    elif head_dim <= 256:
         tile_n = 64 if is_local else 80
         return FwdConfig(128, tile_n, True, True)
+    else:  # hdim 512 (PR #2422): tile 64x64, khong intra-wg overlap, 1 stage
+        tile_n = 64
+        return FwdConfig(64, tile_n, False, True)
 
 
 def maybe_contiguous(x):
@@ -1413,7 +1417,7 @@ def _flash_attn_fwd(
                 tile_m=tile_m,
                 tile_n=tile_n,
                 # num_stages=1,
-                num_stages=2,
+                num_stages=1 if any(d > 256 for d in [head_dim, head_dim_v]) else 2,
                 num_threads=num_threads,
                 Q_in_regs=False,
                 intra_wg_overlap=intra_wg_overlap,

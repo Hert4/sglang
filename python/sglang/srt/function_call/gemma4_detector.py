@@ -377,9 +377,10 @@ class Gemma4Detector(BaseFormatDetector):
 
                                 calls.append(
                                     ToolCallItem(
-                                        tool_index=self._tool_indices.get(
-                                            func_name, -1
-                                        ),
+                                        # streaming index = thu tu lan goi trong response
+                                        # (khong phai vi tri trong danh sach tools),
+                                        # neu khong hai lan goi cung ham se dinh index
+                                        tool_index=self.current_tool_id,
                                         name=func_name,
                                         parameters="",
                                     )
@@ -408,9 +409,7 @@ class Gemma4Detector(BaseFormatDetector):
 
                             calls.append(
                                 ToolCallItem(
-                                    tool_index=self._tool_indices.get(
-                                        self.current_func_name, -1
-                                    ),
+                                    tool_index=self.current_tool_id,
                                     parameters=json.dumps(
                                         arguments, ensure_ascii=False
                                     ),

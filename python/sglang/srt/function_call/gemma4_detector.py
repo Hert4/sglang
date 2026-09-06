@@ -1,14 +1,15 @@
 import json
 import logging
-from typing import List, Optional
+from typing import List, Literal, Optional, Union
 
-from sglang.srt.entrypoints.openai.protocol import Tool
+from sglang.srt.entrypoints.openai.protocol import Tool, ToolChoice
 from sglang.srt.function_call.base_format_detector import BaseFormatDetector
 from sglang.srt.function_call.core_types import (
     StreamingParseResult,
     ToolCallItem,
     _GetInfoFunc,
 )
+from sglang.srt.function_call.gemma4_grammar import build_gemma4_tool_call_ebnf
 
 logger = logging.getLogger(__name__)
 
@@ -438,7 +439,48 @@ class Gemma4Detector(BaseFormatDetector):
         return StreamingParseResult(calls=calls, normal_text=normal_text)
 
     def supports_structural_tag(self) -> bool:
-        return False
+        # True so that tool_choice=required/named uses the native parser on
+        # the output produced under get_structural_tag() below.
+        return True
 
     def structure_info(self) -> _GetInfoFunc:
+        # Legacy begin/JSON-schema/end tags cannot express Gemma4's
+        # key:<|"|>value<|"|> argument syntax; get_structural_tag() is used.
         raise NotImplementedError
+
+    def get_structural_tag(
+        self,
+        tools: Union[List[Tool], None] = None,
+        tool_choice: Union[ToolChoice, Literal["auto", "required"]] = "auto",
+        thinking_mode: bool = False,
+        parallel_tool_calls: bool = True,
+    ):
+        """xgrammar structural tag that constrains tool_choice=required/named
+        to Gemma4's native ``<|tool_call>call:name{k:<|"|>v<|"|>}<tool_call|>``
+        format (xgrammar dropped its builtin gemma_4 tag because of the
+        string delimiter). ``auto`` stays unconstrained. The builder never
+        raises: constructs it cannot express degrade to a generic value rule.
+        """
+        if tool_choice == "auto" or not tools:
+            return None
+        if isinstance(tool_choice, ToolChoice):
+            name = tool_choice.function.name
+            chosen = [t for t in tools if t.function.name == name]
+            if not chosen:
+                return None
+            tools, parallel_tool_calls = chosen, False
+        try:
+            ebnf = build_gemma4_tool_call_ebnf(
+                [(t.function.name, t.function.parameters or {}) for t in tools],
+                parallel_tool_calls=parallel_tool_calls,
+                start_token=self.tool_call_start_token,
+                end_token=self.tool_call_end_token,
+                string_delim=STRING_DELIM,
+            )
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(f"gemma4 structural tag build failed, unconstrained: {e}")
+            return None
+        return {
+            "type": "structural_tag",
+            "format": {"type": "grammar", "grammar": ebnf},
+        }

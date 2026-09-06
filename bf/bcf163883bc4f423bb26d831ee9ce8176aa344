@@ -1,0 +1,19 @@
+python/sglang/srt/function_call/gemma4_detector.py
+  s_d2003be81f3894::t_c785231b3ea031 483-489
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "bfbcf163883bc4f423bb26d831ee9ce8176aa344",
+  "prompts": {},
+  "sessions": {
+    "s_d2003be81f3894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58966894-6f93-4eec-b9ca-c71c949a6b43",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+python/sglang/srt/function_call/gemma4_grammar.py
+  s_d2003be81f3894::t_65b27eb235e976 1-220
+python/sglang/srt/function_call/gemma4_detector.py
+  s_d2003be81f3894::t_a8e9e75204012e 3,5,12,442-444,447-448,450-486
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f0f9190874e981a99c0f30a7d41eaa5f1b5360e5",
+  "prompts": {},
+  "sessions": {
+    "s_d2003be81f3894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58966894-6f93-4eec-b9ca-c71c949a6b43",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

@@ -480,7 +480,10 @@ class Gemma4Detector(BaseFormatDetector):
         except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"gemma4 structural tag build failed, unconstrained: {e}")
             return None
-        return {
-            "type": "structural_tag",
-            "format": {"type": "grammar", "grammar": ebnf},
-        }
+        try:
+            from xgrammar.structural_tag import GrammarFormat, StructuralTag
+        except Exception as e:  # pragma: no cover - xgrammar missing/old
+            logger.warning(f"xgrammar structural tag unavailable, unconstrained: {e}")
+            return None
+        # protocol.py serialises this with .model_dump(by_alias=True)
+        return StructuralTag(format=GrammarFormat(grammar=ebnf))

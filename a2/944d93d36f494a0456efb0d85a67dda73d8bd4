@@ -1,0 +1,23 @@
+python/sglang/srt/arg_groups/mamba_hook.py
+  s_d2003be81f3894::t_8c6037c5be4cd7 18-23,35-63
+python/sglang/srt/mem_cache/unified_cache/unified_tree_core.py
+  s_d2003be81f3894::t_377cfb600ca299 20,86,402-409,719,729,739,754-757,810,816,825,833-881,886,893-901,922-924
+python/sglang/srt/server_args.py
+  s_d2003be81f3894::t_297cf064aff181 2604-2623
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "a2944d93d36f494a0456efb0d85a67dda73d8bd4",
+  "prompts": {},
+  "sessions": {
+    "s_d2003be81f3894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58966894-6f93-4eec-b9ca-c71c949a6b43",
+        "model": "claude-opus-5"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

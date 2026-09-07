@@ -54,6 +54,13 @@ def handle_mamba_backend(server_args: Any):
                 f"radix cache; --radix-cache-backend={cfg.radix_cache_backend!r} "
                 "reuses a prefix through its own match path."
             )
+        if cfg.enable_hierarchical_cache:
+            raise ValueError(
+                "--enable-mamba-tail-replay is not supported together with "
+                "--enable-hierarchical-cache: moving the match anchor past the "
+                "newest cached state is untested against host prefetch and "
+                "load-back. Disable one of them."
+            )
         if get_env_backend() != "python":
             raise ValueError(
                 "--enable-mamba-tail-replay is implemented in the Python tree "

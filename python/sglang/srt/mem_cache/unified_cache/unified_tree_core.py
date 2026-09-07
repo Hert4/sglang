@@ -83,7 +83,7 @@ from sglang.srt.mem_cache.utils import (
     get_eviction_strategy,
     split_node_hash_value,
 )
-from sglang.srt.runtime_context import get_exec
+from sglang.srt.runtime_context import get_exec, mamba_checkpoint_grid
 
 if TYPE_CHECKING:
     from sglang.srt.managers.schedule_batch import Req
@@ -407,6 +407,14 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         )
         self.mamba_tail_replay_ratio = _mamba_exec.mamba_tail_replay_ratio
         self.mamba_tail_replay_min_tokens = _mamba_exec.mamba_tail_replay_min_tokens
+        # A prefix boundary is also a checkpoint depth, and a checkpoint depth has to
+        # land on the grid the tree can name. Cutting on `page_size` alone would put
+        # the boundary off-grid and the branching checkpoint would never be stored.
+        self.mamba_tail_replay_align = (
+            mamba_checkpoint_grid(params.page_size)
+            if self.enable_mamba_tail_replay
+            else params.page_size
+        )
         self.enable_hicache = False
         self.enable_storage = False
         self.enable_external_cache_linker = False
@@ -852,6 +860,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         """
         if not self.enable_mamba_tail_replay:
             return None
+        if self.enable_hicache:
+            return None  # moving the match anchor is untested against prefetch/load-back
         chunk_lens = [len(v) for v in value]
         total = sum(chunk_lens)
         covered = sum(chunk_lens[:best_match_device_value_len])
@@ -862,7 +872,8 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             math.ceil(self.mamba_tail_replay_ratio * total),
             self.mamba_tail_replay_min_tokens,
         )
-        prefix_len = ((total - replayed) // self.page_size) * self.page_size
+        align = self.mamba_tail_replay_align
+        prefix_len = ((total - replayed) // align) * align
         if prefix_len <= covered:
             return None  # replaying that much would reuse less than we already do
 

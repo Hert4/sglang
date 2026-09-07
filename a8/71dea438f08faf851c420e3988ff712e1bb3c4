@@ -1,0 +1,19 @@
+python/sglang/srt/arg_groups/mamba_hook.py
+  s_d2003be81f3894::t_cbc18f12b288e9 64-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "a871dea438f08faf851c420e3988ff712e1bb3c4",
+  "prompts": {},
+  "sessions": {
+    "s_d2003be81f3894": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58966894-6f93-4eec-b9ca-c71c949a6b43",
+        "model": "claude-opus-5"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

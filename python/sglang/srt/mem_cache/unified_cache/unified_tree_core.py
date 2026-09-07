@@ -17,6 +17,7 @@ cache for cache-level logic, but the TreeCore itself never touches it.
 from __future__ import annotations
 
 import logging
+import math
 import sys
 from array import array
 from collections import defaultdict
@@ -82,6 +83,7 @@ from sglang.srt.mem_cache.utils import (
     get_eviction_strategy,
     split_node_hash_value,
 )
+from sglang.srt.runtime_context import get_exec
 
 if TYPE_CHECKING:
     from sglang.srt.managers.schedule_batch import Req
@@ -397,6 +399,14 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
     ):
         self.page_size = params.page_size
         self.is_eagle = params.is_eagle and ComponentType.MAMBA not in components
+        # Tail replay only means anything for a tree that carries recurrent state, and
+        # the flag is read once here so a hybrid-free deployment pays nothing for it.
+        _mamba_exec = get_exec().mamba
+        self.enable_mamba_tail_replay = (
+            ComponentType.MAMBA in components and _mamba_exec.enable_mamba_tail_replay
+        )
+        self.mamba_tail_replay_ratio = _mamba_exec.mamba_tail_replay_ratio
+        self.mamba_tail_replay_min_tokens = _mamba_exec.mamba_tail_replay_min_tokens
         self.enable_hicache = False
         self.enable_storage = False
         self.enable_external_cache_linker = False
@@ -706,6 +716,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
 
         (
             value,
+            matched_nodes,
             best_match_node,
             best_match_device_node,
             best_match_device_value_len,
@@ -715,6 +726,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         return self._match_post_processor(
             params,
             value,
+            matched_nodes,
             best_match_node,
             best_match_device_node,
             best_match_device_value_len,
@@ -724,6 +736,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
 
     def _match_prefix_helper(self, key: RadixKey) -> tuple[
         list[torch.Tensor],
+        list[UnifiedTreeNode],
         UnifiedTreeNode,
         UnifiedTreeNode,
         int,
@@ -738,6 +751,10 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
         key_offset = 0
         child_key = key.child_key_at(key_offset, self.page_size)
         value: list[torch.Tensor] = []
+        # Parallel to `value`: the node each chunk came from, so a caller can turn a
+        # token offset into the node that ends there. Only appended together with a
+        # value chunk, so cumulative chunk lengths address these nodes exactly.
+        matched_nodes: list[UnifiedTreeNode] = []
         best_match_node = node
         best_match_device_node = node
         best_match_device_value_len = 0
@@ -790,11 +807,13 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
                 node, action = self._split_node(child.key, child, prefix_len)
                 if not node.evicted:
                     value.append(node.component_data[BASE_COMPONENT_TYPE].value)
+                    matched_nodes.append(node)
                 _update_best_if_valid(node)
                 break
 
             if not child.evicted:
                 value.append(child.component_data[BASE_COMPONENT_TYPE].value)
+                matched_nodes.append(child)
             node = child
             _update_best_if_valid(node)
             key_offset += prefix_len
@@ -803,6 +822,7 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
 
         return (
             value,
+            matched_nodes,
             best_match_node,
             best_match_device_node,
             best_match_device_value_len,
@@ -810,16 +830,75 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             action,
         )
 
+    def _tail_replay_anchor(
+        self,
+        value: list[torch.Tensor],
+        matched_nodes: list[UnifiedTreeNode],
+        best_match_device_value_len: int,
+    ) -> Optional[tuple[UnifiedTreeNode, int, Optional[CacheAction | ComponentAction]]]:
+        """Pick the deepest reusable prefix boundary for Mamba tail replay.
+
+        A hybrid model can reuse full-attention KV at any token, but its linear-attention
+        state only exists where a checkpoint was stored, so a match is normally cut back
+        to the newest checkpoint and everything past it is prefilled again. Tail replay
+        moves the cut forward instead: reuse the KV up to ``P``, then let the request
+        rebuild the recurrent state by running the remaining tail from a zero state. The
+        anchor returned here has no cached state of its own, so the caller's copy-on-write
+        step finds nothing to copy and the request starts from zero, which is the whole
+        mechanism.
+
+        Returns ``(anchor node, prefix length in indices, split action)``, or None to
+        leave today's checkpoint-aligned behaviour untouched.
+        """
+        if not self.enable_mamba_tail_replay:
+            return None
+        chunk_lens = [len(v) for v in value]
+        total = sum(chunk_lens)
+        covered = sum(chunk_lens[:best_match_device_value_len])
+        if total <= covered:
+            return None  # the newest checkpoint already covers the whole match
+
+        replayed = max(
+            math.ceil(self.mamba_tail_replay_ratio * total),
+            self.mamba_tail_replay_min_tokens,
+        )
+        prefix_len = ((total - replayed) // self.page_size) * self.page_size
+        if prefix_len <= covered:
+            return None  # replaying that much would reuse less than we already do
+
+        offset = 0
+        for node, chunk_len in zip(matched_nodes, chunk_lens):
+            if offset + chunk_len == prefix_len:
+                return node, prefix_len, None
+            if offset + chunk_len > prefix_len:
+                split_at = prefix_len - offset
+                new_node, split_action = self._split_node(
+                    node.key, node, split_at
+                )
+                return new_node, prefix_len, split_action
+            offset += chunk_len
+        return None
+
     def _match_post_processor(
         self,
         params: MatchPrefixParams,
         value: list[torch.Tensor],
+        matched_nodes: list[UnifiedTreeNode],
         best_match_node: UnifiedTreeNode,
         best_match_device_node: UnifiedTreeNode,
         best_match_device_value_len: int,
         full_kv_hit_length: int,
         action: Optional[CacheAction | ComponentAction],
     ) -> MatchResult:
+        tail_replay = self._tail_replay_anchor(
+            value, matched_nodes, best_match_device_value_len
+        )
+        if tail_replay is not None:
+            anchor, tail_replay_len, split_action = tail_replay
+            best_match_node = anchor
+            best_match_device_node = anchor
+            if action is None:
+                action = split_action
         node_update = best_match_node
         for comp in self.components:
             if comp.component_type == BASE_COMPONENT_TYPE:
@@ -840,7 +919,9 @@ class UnifiedTreeCore(UnifiedTreeCoreInterface):
             best_match_node if self.enable_hicache else best_match_device_node
         )
 
-        if best_match_device_value_len > 0:
+        if tail_replay is not None:
+            device_indices = torch.cat(value)[:tail_replay_len]
+        elif best_match_device_value_len > 0:
             device_indices = torch.cat(value[:best_match_device_value_len])
         else:
             device_indices = self._empty_match_result.device_indices

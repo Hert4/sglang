@@ -2601,6 +2601,26 @@ class ServerArgs:
         "Tail, fork, and locked nodes are preserved. Must be -1 or a positive integer.",
         NS("exec.mamba"),
     ] = -1
+    enable_mamba_tail_replay: A[
+        bool,
+        "Reuse a matched prefix past the newest cached Mamba state: the linear-attention "
+        "state is rebuilt by replaying only a short tail of that prefix from a zero state, "
+        "while the exact full-attention KV of the whole prefix is reused. Approximate: the "
+        "rebuilt state is close to, not equal to, the state a full prefill would produce.",
+        NS("exec.mamba"),
+    ] = False
+    mamba_tail_replay_ratio: A[
+        float,
+        "Fraction of the matched prefix replayed to rebuild the linear-attention state "
+        "when --enable-mamba-tail-replay is on. Larger is more faithful and slower.",
+        NS("exec.mamba"),
+    ] = 0.05
+    mamba_tail_replay_min_tokens: A[
+        int,
+        "Lower bound, in tokens, on the replayed tail. Also the shortest reuse gain worth "
+        "taking: tail replay is skipped when it would not reach past the newest cached state.",
+        NS("exec.mamba"),
+    ] = 512
     enable_mamba_cache_stochastic_rounding: A[
         bool,
         "Enable stochastic rounding when writing FP16 Mamba SSM cache states. Requires --mamba-ssm-dtype float16 and CUDA. With --mamba-backend triton, requires SM100.",

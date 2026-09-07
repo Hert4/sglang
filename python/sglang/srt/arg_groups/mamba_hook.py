@@ -15,6 +15,12 @@ from sglang.srt.runtime_context import get_platform
 logger = logging.getLogger(__name__)
 
 
+def get_env_backend() -> str:
+    import os
+
+    return os.environ.get("SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND", "python")
+
+
 def handle_mamba_backend(server_args: Any):
     cfg = resolving_view(server_args)
     if cfg.mamba_cache_philox_rounds < 0:
@@ -25,6 +31,35 @@ def handle_mamba_backend(server_args: Any):
             "--mamba-max-states-per-path must be -1 (unlimited) or a positive "
             f"integer, got {cfg.mamba_max_states_per_path}."
         )
+
+    if cfg.enable_mamba_tail_replay:
+        if not 0.0 < cfg.mamba_tail_replay_ratio < 1.0:
+            raise ValueError(
+                "--mamba-tail-replay-ratio must be between 0 and 1, got "
+                f"{cfg.mamba_tail_replay_ratio}."
+            )
+        if cfg.mamba_tail_replay_min_tokens < 0:
+            raise ValueError(
+                "--mamba-tail-replay-min-tokens must be non-negative, got "
+                f"{cfg.mamba_tail_replay_min_tokens}."
+            )
+        if cfg.disable_radix_cache:
+            raise ValueError(
+                "--enable-mamba-tail-replay needs the radix cache: it widens a "
+                "prefix match, and there are no matches without it."
+            )
+        if cfg.radix_cache_backend is not None:
+            raise ValueError(
+                "--enable-mamba-tail-replay only supports the built-in unified "
+                f"radix cache; --radix-cache-backend={cfg.radix_cache_backend!r} "
+                "reuses a prefix through its own match path."
+            )
+        if get_env_backend() != "python":
+            raise ValueError(
+                "--enable-mamba-tail-replay is implemented in the Python tree "
+                "core; SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND="
+                f"{get_env_backend()!r} would silently ignore it."
+            )
 
     if cfg.enable_mamba_cache_stochastic_rounding:
         if cfg.mamba_ssm_dtype != "float16":

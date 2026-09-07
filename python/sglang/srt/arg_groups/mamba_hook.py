@@ -61,6 +61,21 @@ def handle_mamba_backend(server_args: Any):
                 "newest cached state is untested against host prefetch and "
                 "load-back. Disable one of them."
             )
+        # Tail replay rebuilds the recurrent state from an approximation, and
+        # block-sparse prefill drops KV blocks the replay would otherwise read.
+        # Neither is wrong on its own; together the two approximations compound on
+        # exactly the long prompts each is meant to speed up, and nobody has measured
+        # the pair. Warn rather than refuse: the sparse gate may never fire.
+        if getattr(cfg, "prefill_attention_backend", None) == "flashprefill":
+            logger.warning(
+                "--enable-mamba-tail-replay together with the flashprefill "
+                "block-sparse prefill backend stacks two approximations on the same "
+                "request once the sparse gate (--flashprefill-min-sparse-kv-len=%s) "
+                "opens. Measure output quality on prompts longer than that gate "
+                "before trusting the combination.",
+                getattr(cfg, "flashprefill_min_sparse_kv_len", "?"),
+            )
+
         if get_env_backend() != "python":
             raise ValueError(
                 "--enable-mamba-tail-replay is implemented in the Python tree "

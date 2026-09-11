@@ -1,0 +1,25 @@
+python/sglang/srt/layers/attention/attention_registry.py
+  s_b65aeec487fbb2::t_e51b70718b4a29 499-507
+python/sglang/srt/layers/attention/compactattn_backend.py
+  s_b65aeec487fbb2::t_87920d2981d24e 1-278
+python/sglang/srt/layers/attention/flashprefill_backend.py
+  s_b65aeec487fbb2::t_6c205817f40686 166-175,180-188
+python/sglang/srt/server_args.py
+  s_b65aeec487fbb2::t_b285eab79a1c47 183,1764-1799
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "819d0c7a3e6bfada812894d08680fc831fdcf208",
+  "prompts": {},
+  "sessions": {
+    "s_b65aeec487fbb2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "38ca06e3-ca9f-4ee8-b670-04f2ca90ca93",
+        "model": "claude-opus-5"
+      },
+      "human_author": "tmduc3 <tmduc3@rd.misa.com.vn>"
+    }
+  }
+}

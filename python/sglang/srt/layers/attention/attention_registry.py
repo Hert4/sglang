@@ -496,6 +496,15 @@ def create_intel_xpu_backend(runner):
     return XPUAttentionBackend(runner)
 
 
+@register_attention_backend("compactattn")
+def create_compactattn_backend(runner):
+    if runner.use_mla_backend:
+        raise ValueError("compactattn backend can only be used with non-MLA models.")
+    from sglang.srt.layers.attention.compactattn_backend import CompactAttnBackend
+
+    return CompactAttnBackend(runner)
+
+
 @register_attention_backend("flashprefill")
 def create_flashprefill_backend(runner):
     if runner.use_mla_backend:

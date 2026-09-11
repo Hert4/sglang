@@ -180,6 +180,7 @@ QUANTIZATION_CHOICES = [
 
 ATTENTION_BACKEND_CHOICES = [
     # Common
+    "compactattn",
     "flashprefill",
     "triton",
     "torch_native",
@@ -1760,6 +1761,42 @@ class ServerArgs:
         "Batches whose max KV length is at or below this fall back to dense attention entirely. Index-construction cost is paid at every length while the saving scales with KV length, so below the crossover the batch pays more than it saves. Unlike --flashprefill-min-sparse-q-len this stays meaningful under chunked prefill, where the max Q length equals the chunk size at every chunk. 0 disables the gate.",
         NS("exec.kernel"),
     ] = 0
+    # CompactAttention (arXiv 2605.16839) tren nen FA4 -- xem compactattn_backend.py
+    compactattn_select: A[
+        str,
+        "Prefix selection policy: 'all' keeps every prefix token (correctness gate: output must match dense fa4); 'strided' keeps sinks + a trailing window + an even stride through the middle.",
+        NS("exec.kernel"),
+    ] = "all"
+    compactattn_block_n: A[
+        int,
+        "KV block size in tokens for selection.",
+        NS("exec.kernel"),
+    ] = 64
+    compactattn_topk_blocks: A[
+        int,
+        "Total prefix blocks kept per request, sinks and trailing window included.",
+        NS("exec.kernel"),
+    ] = 64
+    compactattn_sink_blocks: A[
+        int,
+        "Leading blocks always kept.",
+        NS("exec.kernel"),
+    ] = 2
+    compactattn_local_blocks: A[
+        int,
+        "Trailing prefix blocks always kept.",
+        NS("exec.kernel"),
+    ] = 4
+    compactattn_min_prefix_len: A[
+        int,
+        "Batches whose longest prefix is at or below this stay dense: index-building costs the same at every length while the saving scales with prefix length.",
+        NS("exec.kernel"),
+    ] = 8192
+    flashprefill_dense_fa_version: A[
+        int,
+        "FlashAttention version for the dense delegate inside the flashprefill backend (decode, SWA layers, and the dense fallback). 3 keeps the original behaviour; 4 is required by models v3 rejects, such as Gemma4 on Hopper.",
+        NS("exec.kernel"),
+    ] = 3
     flashprefill_k_block_n: A[
         int,
         "Logical K-block size in tokens for scoring and selection; a power-of-two multiple of 64, expanded into 64-token attention tiles by the index builder.",

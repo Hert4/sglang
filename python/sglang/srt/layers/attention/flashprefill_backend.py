@@ -163,13 +163,29 @@ class FlashPrefillAttnBackend(AttentionBackend):
             use_mean_correction=use_mean_correction,
         )
 
-        # Decode is NOT block-sparse: delegate it verbatim to a standard FA3
-        # backend. This instance owns its own decode metadata and CUDA graph state.
+        # Decode is NOT block-sparse: delegate it verbatim to a standard
+        # FlashAttention backend. This instance owns its own decode metadata and
+        # CUDA graph state.
+        #
+        # The delegate must run the SAME FlashAttention version the model would
+        # have used without this backend. Hard-coding v3 breaks every model that
+        # v3 rejects but v4 serves -- Gemma4 on H200 dies at the first real
+        # forward with "FlashAttention forward only supports head dimension at
+        # most 256", from the dense-fallback path, before any block-sparse code
+        # runs. Take the version from the resolved server args.
         from sglang.srt.layers.attention.flashattention_backend import (
             FlashAttentionBackend,
         )
 
-        self.decode_backend = FlashAttentionBackend(model_runner)
+        # No heuristic here: which version a model needs is not derivable from
+        # head_dim alone (Gemma4 declares head_dim 256 and v3 still rejects it),
+        # so the version is an explicit knob and the default keeps old behaviour.
+        fa_impl_ver = int(
+            getattr(model_runner.server_args, "flashprefill_dense_fa_version", 3)
+        )
+        self.decode_backend = FlashAttentionBackend(
+            model_runner, fa_impl_ver=fa_impl_ver
+        )
 
     # ------------------------------------------------------------------ #
     # Metadata                                                            #
